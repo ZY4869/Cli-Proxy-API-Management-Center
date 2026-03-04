@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SecondaryScreenShell } from '@/components/common/SecondaryScreenShell';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -44,6 +44,7 @@ type ModelRow = {
 export function BillingModelPricesPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const showNotification = useNotificationStore((state) => state.showNotification);
 
   const apiBase = useAuthStore((state) => state.apiBase);
@@ -184,6 +185,20 @@ export function BillingModelPricesPage() {
     [modelPrices]
   );
 
+  const clearModelSearchParam = useCallback(() => {
+    if (!searchParams.get('model')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('model');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const fromQuery = searchParams.get('model');
+    if (!fromQuery) return;
+    if (editModel) return;
+    openEdit(fromQuery);
+  }, [editModel, openEdit, searchParams]);
+
   const handleSaveEdit = useCallback(() => {
     if (!editModel) return;
     const prompt = Number.parseFloat(editPrompt) || 0;
@@ -192,8 +207,9 @@ export function BillingModelPricesPage() {
     const next = { ...modelPrices, [editModel]: { prompt, completion, cache } };
     persistPrices(next);
     setEditModel(null);
+    clearModelSearchParam();
     showNotification(t('billing.model_prices_saved'), 'success');
-  }, [editCache, editCompletion, editModel, editPrompt, modelPrices, persistPrices, showNotification, t]);
+  }, [clearModelSearchParam, editCache, editCompletion, editModel, editPrompt, modelPrices, persistPrices, showNotification, t]);
 
   const handleDeletePrice = useCallback(
     (modelName: string) => {
@@ -357,7 +373,10 @@ export function BillingModelPricesPage() {
       <Modal
         open={editModel !== null}
         title={editModel ?? ''}
-        onClose={() => setEditModel(null)}
+        onClose={() => {
+          setEditModel(null);
+          clearModelSearchParam();
+        }}
         width={520}
         footer={
           <div className={styles.rowActions}>

@@ -1,0 +1,192 @@
+@use '../../styles/variables' as *;
+@use '../../styles/mixins' as *;
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.mutedHint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.filtersRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.search {
+  flex: 1;
+  min-width: 220px;
+}
+
+.counts {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.countItem {
+  padding: 4px 10px;
+  border-radius: $radius-full;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.modelsListWrap {
+  border-top: 1px solid var(--border-color);
+  max-height: 420px;
+  overflow: auto;
+}
+
+.modelsList {
+  display: flex;
+  flex-direction: column;
+}
+
+.modelHeader,
+.modelRow {
+  display: grid;
+  grid-template-columns: 2fr 1.6fr 0.9fr 0.9fr;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+.modelHeader {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+
+  @include mobile {
+    display: none;
+  }
+}
+
+.modelRow {
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  transition: background $transition-fast;
+
+  &:hover {
+    background: var(--bg-secondary);
+  }
+}
+
+.modelName {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.modelNameMain {
+  font-family: $font-mono;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-primary);
+  @include text-ellipsis;
+}
+
+.modelNameSub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  @include text-ellipsis;
+}
+
+.priceMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+
+  span {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+  }
+}
+
+.priceLabel {
+  color: var(--text-tertiary);
+  font-weight: 700;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: $radius-full;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  width: fit-content;
+}
+
+.statusConfigured {
+  color: var(--success-color, #22c55e);
+  border-color: rgba($success-color, 0.28);
+  background: rgba($success-color, 0.12);
+}
+
+.statusMissing {
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+}
+
+.rowActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  @include mobile {
+    justify-content: flex-start;
+  }
+}
+
+.sectionDivider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 14px 0;
+}
+
+.sectionTitle {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+}
+
+.sectionSubtitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+}

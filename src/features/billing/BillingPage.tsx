@@ -23,6 +23,7 @@ import { CacheImpactCard } from './CacheImpactCard';
 import { BillingFiltersBar } from './BillingFiltersBar';
 import { BillingKpiCards } from './BillingKpiCards';
 import { EndpointListCard } from './EndpointListCard';
+import { BillingModelPricesCard } from './BillingModelPricesCard';
 import {
   buildBillingAnalytics,
   matchesBillingEndpointFilters,
@@ -371,6 +372,8 @@ export function BillingPage() {
           onEdit={() => navigate(`/billing/endpoint?key=${encodeURIComponent('__default__')}`)}
         />
       </div>
+
+      <BillingModelPricesCard />
 
       <EndpointListCard
         loading={loading && !usage}
