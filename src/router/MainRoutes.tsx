@@ -22,12 +22,9 @@ import { LogsPage } from '@/pages/LogsPage';
 import { SystemPage } from '@/pages/SystemPage';
 import { MonitorPage } from '@/pages/MonitorPage';
 import { BackupPage } from '@/features/webdavBackup/BackupPage';
-<<<<<<< HEAD
 import { BillingPage } from '@/features/billing/BillingPage';
 import { BillingEndpointEditPage } from '@/features/billing/BillingEndpointEditPage';
 import { BillingModelPricesPage } from '@/features/billing/BillingModelPricesPage';
-=======
->>>>>>> 66147c05f4762a9216c7de11145744a2835d57b6
 
 const mainRoutes = [
   { path: '/', element: <DashboardPage /> },
