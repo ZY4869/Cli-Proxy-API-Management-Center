@@ -22,6 +22,7 @@ import { TierDistributionCard } from './TierDistributionCard';
 import { CacheImpactCard } from './CacheImpactCard';
 import { BillingFiltersBar } from './BillingFiltersBar';
 import { BillingKpiCards } from './BillingKpiCards';
+import { BillingRulesQuickStartCard } from './BillingRulesQuickStartCard';
 import { EndpointListCard } from './EndpointListCard';
 import { BillingModelPricesCard } from './BillingModelPricesCard';
 import {
@@ -88,8 +89,18 @@ export function BillingPage() {
   const [statusFilter, setStatusFilter] = useState<BillingStatusFilter>('all');
   const [includeUnused, setIncludeUnused] = useState(true);
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const defaultRuleRef = useRef<HTMLDivElement | null>(null);
+  const endpointRulesRef = useRef<HTMLDivElement | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+
+  const scrollToDefaultRule = useCallback(() => {
+    defaultRuleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  const scrollToEndpointRules = useCallback(() => {
+    endpointRulesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   useEffect(() => {
     try {
@@ -254,6 +265,13 @@ export function BillingPage() {
     return rows;
   }, [analytics.endpoints, billingConfig, endpointRules, filters, includeUnused]);
 
+  const handleEnableDefaultRule = useCallback(() => {
+    if (defaultRule.enabled) return;
+    setDefaultRule({ ...defaultRule, enabled: true });
+    showNotification(t('billing.default_rule_enabled_toast'), 'success');
+    scrollToDefaultRule();
+  }, [defaultRule, scrollToDefaultRule, setDefaultRule, showNotification, t]);
+
   return (
     <div className={styles.container}>
       {loading && !usage && (
@@ -271,6 +289,12 @@ export function BillingPage() {
           <p className={styles.pageSubtitle}>{t('billing.subtitle')}</p>
         </div>
         <div className={styles.headerActions}>
+          <Button variant="secondary" size="sm" onClick={scrollToDefaultRule} disabled={loading}>
+            {t('billing.default_rule')}
+          </Button>
+          <Button variant="secondary" size="sm" onClick={scrollToEndpointRules} disabled={loading}>
+            {t('billing.endpoint_rules')}
+          </Button>
           <Button variant="secondary" size="sm" onClick={() => navigate('/billing/models')} disabled={loading}>
             {t('billing.model_prices')}
           </Button>
@@ -329,6 +353,15 @@ export function BillingPage() {
         disabled={loading && !usage}
       />
 
+      {!analytics.hasAnyEnabledRule && (
+        <BillingRulesQuickStartCard
+          onEditDefaultRule={() => navigate(`/billing/endpoint?key=${encodeURIComponent('__default__')}`)}
+          onEnableDefaultRule={handleEnableDefaultRule}
+          onScrollToDefaultRule={scrollToDefaultRule}
+          onScrollToEndpointRules={scrollToEndpointRules}
+        />
+      )}
+
       <BillingKpiCards
         loading={loading && !usage}
         timeRangeLabel={timeRangeLabel}
@@ -364,22 +397,26 @@ export function BillingPage() {
         />
       </div>
 
-      <div className={styles.statsGrid}>
-        <CacheImpactCard loading={loading && !usage} analytics={analytics} timeRangeLabel={timeRangeLabel} />
-        <DefaultRuleCard
-          rule={defaultRule}
-          onRuleChange={setDefaultRule}
-          onEdit={() => navigate(`/billing/endpoint?key=${encodeURIComponent('__default__')}`)}
-        />
-      </div>
+	      <div className={styles.statsGrid}>
+	        <CacheImpactCard loading={loading && !usage} analytics={analytics} timeRangeLabel={timeRangeLabel} />
+	        <div ref={defaultRuleRef}>
+	          <DefaultRuleCard
+	            rule={defaultRule}
+	            onRuleChange={setDefaultRule}
+	            onEdit={() => navigate(`/billing/endpoint?key=${encodeURIComponent('__default__')}`)}
+	          />
+	        </div>
+	      </div>
 
       <BillingModelPricesCard />
 
-      <EndpointListCard
-        loading={loading && !usage}
-        rows={endpointRows}
-        onEditEndpoint={(endpoint) => navigate(`/billing/endpoint?key=${encodeURIComponent(endpoint)}`)}
-      />
-    </div>
-  );
+	      <div ref={endpointRulesRef}>
+	        <EndpointListCard
+	          loading={loading && !usage}
+	          rows={endpointRows}
+	          onEditEndpoint={(endpoint) => navigate(`/billing/endpoint?key=${encodeURIComponent(endpoint)}`)}
+	        />
+	      </div>
+	    </div>
+	  );
 }
