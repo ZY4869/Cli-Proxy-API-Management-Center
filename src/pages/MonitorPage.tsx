@@ -19,7 +19,10 @@ import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useThemeStore } from '@/stores';
-import { usageApi, providersApi } from '@/services/api';
+import { usageApi, providersApi, authFilesApi } from '@/services/api';
+import { buildSourceInfoMap } from '@/utils/sourceResolver';
+import { normalizeAuthIndex } from '@/utils/usage';
+import type { CredentialInfo } from '@/types/sourceInfo';
 import { KpiCards } from '@/components/monitor/KpiCards';
 import { ModelDistributionChart } from '@/components/monitor/ModelDistributionChart';
 import { DailyTrendChart } from '@/components/monitor/DailyTrendChart';
@@ -84,39 +87,144 @@ export function MonitorPage() {
   const [apiFilter, setApiFilter] = useState('');
   const [providerMap, setProviderMap] = useState<Record<string, string>>({});
   const [providerModels, setProviderModels] = useState<Record<string, Set<string>>>({});
+  const [providerTypeMap, setProviderTypeMap] = useState<Record<string, string>>({});
+  const [sourceInfoMap, setSourceInfoMap] = useState<Map<string, import('@/types/sourceInfo').SourceInfo>>(new Map());
+  const [authFileMap, setAuthFileMap] = useState<Map<string, CredentialInfo>>(new Map());
 
-  // 加载渠道名称映射（参照原始 Web UI 的映射方式）
+  // 加载渠道名称映射（支持所有提供商类型）
   const loadProviderMap = useCallback(async () => {
     try {
-      const providers = await providersApi.getOpenAIProviders();
       const map: Record<string, string> = {};
       const modelsMap: Record<string, Set<string>> = {};
-      providers.forEach((provider) => {
-        // 使用 X-Provider header 或 name 作为渠道名称
+      const typeMap: Record<string, string> = {};
+
+      // 并行加载所有提供商配置和认证文件
+      const [openaiProviders, geminiKeys, claudeConfigs, codexConfigs, vertexConfigs, authFilesResponse] = await Promise.all([
+        providersApi.getOpenAIProviders().catch(() => []),
+        providersApi.getGeminiKeys().catch(() => []),
+        providersApi.getClaudeConfigs().catch(() => []),
+        providersApi.getCodexConfigs().catch(() => []),
+        providersApi.getVertexConfigs().catch(() => []),
+        authFilesApi.list().catch(() => ({ files: [] })),
+      ]);
+
+      // 处理 OpenAI 兼容提供商
+      openaiProviders.forEach((provider) => {
         const providerName = provider.headers?.['X-Provider'] || provider.name || 'unknown';
-        // 存储每个渠道的可用模型（使用 alias 和 name 作为标识）
         const modelSet = new Set<string>();
         (provider.models || []).forEach((m) => {
           if (m.alias) modelSet.add(m.alias);
           if (m.name) modelSet.add(m.name);
         });
-        // 遍历 api-key-entries，将每个 api-key 映射到 provider 名称和模型集合
         const apiKeyEntries = provider.apiKeyEntries || [];
         apiKeyEntries.forEach((entry) => {
           const apiKey = entry.apiKey;
           if (apiKey) {
             map[apiKey] = providerName;
             modelsMap[apiKey] = modelSet;
+            typeMap[apiKey] = 'OpenAI';
           }
         });
-        // 也用 name 作为 key（备用）
         if (provider.name) {
           map[provider.name] = providerName;
           modelsMap[provider.name] = modelSet;
+          typeMap[provider.name] = 'OpenAI';
         }
       });
+
+      // 处理 Gemini 提供商
+      geminiKeys.forEach((config) => {
+        const apiKey = config.apiKey;
+        if (apiKey) {
+          const providerName = config.prefix?.trim() || 'Gemini';
+          map[apiKey] = providerName;
+          typeMap[apiKey] = 'Gemini';
+        }
+      });
+
+      // 处理 Claude 提供商
+      claudeConfigs.forEach((config) => {
+        const apiKey = config.apiKey;
+        if (apiKey) {
+          const providerName = config.prefix?.trim() || 'Claude';
+          map[apiKey] = providerName;
+          typeMap[apiKey] = 'Claude';
+          // 存储模型集合
+          if (config.models && config.models.length > 0) {
+            const modelSet = new Set<string>();
+            config.models.forEach((m) => {
+              if (m.alias) modelSet.add(m.alias);
+              if (m.name) modelSet.add(m.name);
+            });
+            modelsMap[apiKey] = modelSet;
+          }
+        }
+      });
+
+      // 处理 Codex 提供商
+      codexConfigs.forEach((config) => {
+        const apiKey = config.apiKey;
+        if (apiKey) {
+          const providerName = config.prefix?.trim() || 'Codex';
+          map[apiKey] = providerName;
+          typeMap[apiKey] = 'Codex';
+          if (config.models && config.models.length > 0) {
+            const modelSet = new Set<string>();
+            config.models.forEach((m) => {
+              if (m.alias) modelSet.add(m.alias);
+              if (m.name) modelSet.add(m.name);
+            });
+            modelsMap[apiKey] = modelSet;
+          }
+        }
+      });
+
+      // 处理 Vertex 提供商
+      vertexConfigs.forEach((config) => {
+        const apiKey = config.apiKey;
+        if (apiKey) {
+          const providerName = config.prefix?.trim() || 'Vertex';
+          map[apiKey] = providerName;
+          typeMap[apiKey] = 'Vertex';
+          if (config.models && config.models.length > 0) {
+            const modelSet = new Set<string>();
+            config.models.forEach((m) => {
+              if (m.alias) modelSet.add(m.alias);
+              if (m.name) modelSet.add(m.name);
+            });
+            modelsMap[apiKey] = modelSet;
+          }
+        }
+      });
+
       setProviderMap(map);
       setProviderModels(modelsMap);
+      setProviderTypeMap(typeMap);
+
+      // 构建 sourceInfoMap（与请求事件明细相同的解析逻辑）
+      setSourceInfoMap(buildSourceInfoMap({
+        geminiApiKeys: geminiKeys,
+        claudeApiKeys: claudeConfigs,
+        codexApiKeys: codexConfigs,
+        vertexApiKeys: vertexConfigs,
+        openaiCompatibility: openaiProviders,
+      }));
+
+      // 构建 authFileMap（认证文件索引 → 凭证信息）
+      const credMap = new Map<string, CredentialInfo>();
+      const files = (authFilesResponse as { files?: unknown[] })?.files || [];
+      files.forEach((file) => {
+        if (!file || typeof file !== 'object') return;
+        const f = file as Record<string, unknown>;
+        const credKey = normalizeAuthIndex(f['auth_index'] ?? f['authIndex']);
+        if (credKey) {
+          credMap.set(credKey, {
+            name: String(f.name || credKey),
+            type: String(f.type || f.provider || ''),
+          });
+        }
+      });
+      setAuthFileMap(credMap);
     } catch (err) {
       console.warn('Monitor: Failed to load provider map:', err);
     }
@@ -126,12 +234,10 @@ export function MonitorPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    // 渠道映射并行加载，但不阻塞主数据展示
+    loadProviderMap();
     try {
-      // 并行加载使用数据和渠道映射
-      const [response] = await Promise.all([
-        usageApi.getUsage(),
-        loadProviderMap()
-      ]);
+      const response = await usageApi.getUsage();
       // API 返回的数据可能在 response.usage 或直接在 response 中
       const data = response?.usage ?? response;
       setUsageData(data as UsageData);
@@ -285,8 +391,8 @@ export function MonitorPage() {
 
       {/* 统计表格 */}
       <div className={styles.statsGrid}>
-        <ChannelStats data={filteredData} loading={loading} providerMap={providerMap} providerModels={providerModels} />
-        <FailureAnalysis data={filteredData} loading={loading} providerMap={providerMap} providerModels={providerModels} />
+        <ChannelStats data={filteredData} loading={loading} providerMap={providerMap} providerModels={providerModels} sourceInfoMap={sourceInfoMap} authFileMap={authFileMap} />
+        <FailureAnalysis data={filteredData} loading={loading} providerMap={providerMap} providerModels={providerModels} sourceInfoMap={sourceInfoMap} authFileMap={authFileMap} />
       </div>
 
       {/* 请求日志 */}
@@ -294,6 +400,9 @@ export function MonitorPage() {
         data={filteredData}
         loading={loading}
         providerMap={providerMap}
+        providerTypeMap={providerTypeMap}
+        sourceInfoMap={sourceInfoMap}
+        authFileMap={authFileMap}
         apiFilter={apiFilter}
       />
     </div>
