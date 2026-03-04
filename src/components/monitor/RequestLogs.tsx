@@ -2,8 +2,11 @@ import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Card } from '@/components/ui/Card';
-import { usageApi } from '@/services/api';
+import { usageApi, authFilesApi } from '@/services/api';
 import { useDisableModel } from '@/hooks';
+import { normalizeUsageSourceId, normalizeAuthIndex } from '@/utils/usage';
+import { resolveSourceDisplay } from '@/utils/sourceResolver';
+import type { SourceInfo, CredentialInfo } from '@/types/sourceInfo';
 import { TimeRangeSelector, formatTimeRangeCaption, type TimeRange } from './TimeRangeSelector';
 import { DisableModelModal } from './DisableModelModal';
 import {
@@ -21,6 +24,9 @@ interface RequestLogsProps {
   data: UsageData | null;
   loading: boolean;
   providerMap: Record<string, string>;
+  providerTypeMap: Record<string, string>;
+  sourceInfoMap: Map<string, SourceInfo>;
+  authFileMap?: Map<string, CredentialInfo>;
   apiFilter: string;
 }
 
@@ -33,12 +39,13 @@ interface LogEntry {
   source: string;
   displayName: string;
   providerName: string | null;
+  providerType: string;
   maskedKey: string;
-  authIndex: string;
   failed: boolean;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  authIndex: string;
 }
 
 interface ChannelModelRequest {
@@ -56,12 +63,13 @@ interface PrecomputedStats {
 // 虚拟滚动行高
 const ROW_HEIGHT = 40;
 
-export function RequestLogs({ data, loading: parentLoading, providerMap, apiFilter }: RequestLogsProps) {
+export function RequestLogs({ data, loading: parentLoading, providerMap, providerTypeMap, sourceInfoMap, authFileMap: propAuthFileMap, apiFilter }: RequestLogsProps) {
   const { t } = useTranslation();
   const [filterApi, setFilterApi] = useState('');
   const [filterModel, setFilterModel] = useState('');
   const [filterSource, setFilterSource] = useState('');
   const [filterStatus, setFilterStatus] = useState<'' | 'success' | 'failed'>('');
+  const [filterProviderType, setFilterProviderType] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(10);
   const [countdown, setCountdown] = useState(0);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -89,6 +97,10 @@ export function RequestLogs({ data, loading: parentLoading, providerMap, apiFilt
   const [logLoading, setLogLoading] = useState(false);
   const [isFirstLoad, setIsFirstLoad] = useState(true);
 
+  // 认证文件映射（优先使用 prop，否则自行加载）
+  const [localAuthFileMap, setLocalAuthFileMap] = useState<Map<string, CredentialInfo>>(new Map());
+  const authFileMap = propAuthFileMap?.size ? propAuthFileMap : localAuthFileMap;
+
   // 使用禁用模型 Hook
   const {
     disableState,
@@ -97,7 +109,7 @@ export function RequestLogs({ data, loading: parentLoading, providerMap, apiFilt
     handleDisableClick,
     handleConfirmDisable,
     handleCancelDisable,
-  } = useDisableModel({ providerMap });
+  } = useDisableModel({ providerMap, sourceInfoMap });
 
   // 处理时间范围变化
   const handleTimeRangeChange = useCallback((range: TimeRange, custom?: DateRange) => {
@@ -119,12 +131,38 @@ export function RequestLogs({ data, loading: parentLoading, providerMap, apiFilt
     }
   }, [parentLoading, data]);
 
+  // 加载认证文件映射（用于 resolveSourceDisplay）
+  const loadAuthFileMap = useCallback(async () => {
+    try {
+      const response = await authFilesApi.list();
+      const files = response?.files || [];
+      const credMap = new Map<string, CredentialInfo>();
+      files.forEach((file) => {
+        const credKey = normalizeAuthIndex((file as Record<string, unknown>)['auth_index'] ?? file.authIndex);
+        if (credKey) {
+          credMap.set(credKey, {
+            name: file.name || credKey,
+            type: ((file as Record<string, unknown>).type || (file as Record<string, unknown>).provider || '').toString()
+          });
+        }
+      });
+      setLocalAuthFileMap(credMap);
+    } catch (err) {
+      console.warn('Failed to load auth files for index mapping:', err);
+    }
+  }, []);
+
+  // 初始加载认证文件映射
+  useEffect(() => {
+    loadAuthFileMap();
+  }, [loadAuthFileMap]);
+
   // 独立获取日志数据
   const fetchLogData = useCallback(async () => {
     setLogLoading(true);
     try {
       const response = await usageApi.getUsage();
-      const usageData = response?.usage ?? response;
+      const usageData = (response?.usage ?? response) as Record<string, unknown>;
 
       // 应用时间范围过滤
       if (usageData?.apis) {
@@ -227,8 +265,13 @@ export function RequestLogs({ data, loading: parentLoading, providerMap, apiFilt
     };
   }, [autoRefresh]);
 
-  // 时间范围变化时立即刷新数据
+  // 时间范围变化时立即刷新数据（跳过初次挂载，初次使用父组件数据）
+  const skipInitialFetch = useRef(true);
   useEffect(() => {
+    if (skipInitialFetch.current) {
+      skipInitialFetch.current = false;
+      return;
+    }
     fetchLogData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeRange, customRange]);
@@ -253,14 +296,26 @@ export function RequestLogs({ data, loading: parentLoading, providerMap, apiFilt
 
     const entries: LogEntry[] = [];
     let idCounter = 0;
+    const normalizeCache = new Map<string, string>();
 
     Object.entries(effectiveData.apis).forEach(([apiKey, apiData]) => {
       Object.entries(apiData.models).forEach(([modelName, modelData]) => {
         modelData.details.forEach((detail) => {
           const source = detail.source || 'unknown';
-          const { provider, masked } = getProviderDisplayParts(source, providerMap);
-          const displayName = provider ? `${provider} (${masked})` : masked;
+          const { masked } = getProviderDisplayParts(source, providerMap);
           const timestampMs = detail.timestamp ? new Date(detail.timestamp).getTime() : 0;
+          // 使用与请求事件明细相同的 resolveSourceDisplay 解析来源和类型
+          let normalizedSource = normalizeCache.get(source);
+          if (normalizedSource === undefined) {
+            normalizedSource = normalizeUsageSourceId(source);
+            normalizeCache.set(source, normalizedSource);
+          }
+          const sourceInfo = resolveSourceDisplay(normalizedSource, detail.auth_index, sourceInfoMap, authFileMap);
+          const providerType = sourceInfo.type || providerTypeMap[source] || '--';
+          const resolvedName = sourceInfo.displayName && sourceInfo.displayName !== normalizedSource
+            ? sourceInfo.displayName
+            : null;
+          const displayName = resolvedName ? `${resolvedName} (${masked})` : masked;
           entries.push({
             id: `${idCounter++}`,
             timestamp: detail.timestamp,
@@ -269,13 +324,14 @@ export function RequestLogs({ data, loading: parentLoading, providerMap, apiFilt
             model: modelName,
             source,
             displayName,
-            providerName: provider,
+            providerName: resolvedName,
+            providerType,
             maskedKey: masked,
-            authIndex: detail.auth_index || '--',
             failed: detail.failed,
             inputTokens: detail.tokens.input_tokens || 0,
             outputTokens: detail.tokens.output_tokens || 0,
             totalTokens: detail.tokens.total_tokens || 0,
+            authIndex: detail.auth_index || '',
           });
         });
       });
@@ -283,7 +339,7 @@ export function RequestLogs({ data, loading: parentLoading, providerMap, apiFilt
 
     // 按时间倒序排序
     return entries.sort((a, b) => b.timestampMs - a.timestampMs);
-  }, [effectiveData, providerMap]);
+  }, [effectiveData, providerMap, providerTypeMap, sourceInfoMap, authFileMap]);
 
   // 预计算所有条目的统计数据（一次性计算，避免渲染时重复计算）
   const precomputedStats = useMemo(() => {
@@ -339,21 +395,26 @@ export function RequestLogs({ data, loading: parentLoading, providerMap, apiFilt
   }, [logEntries]);
 
   // 获取筛选选项
-  const { apis, models, sources } = useMemo(() => {
+  const { apis, models, sources, providerTypes } = useMemo(() => {
     const apiSet = new Set<string>();
     const modelSet = new Set<string>();
     const sourceSet = new Set<string>();
+    const providerTypeSet = new Set<string>();
 
     logEntries.forEach((entry) => {
       apiSet.add(entry.apiKey);
       modelSet.add(entry.model);
       sourceSet.add(entry.source);
+      if (entry.providerType && entry.providerType !== '--') {
+        providerTypeSet.add(entry.providerType);
+      }
     });
 
     return {
       apis: Array.from(apiSet).sort(),
       models: Array.from(modelSet).sort(),
       sources: Array.from(sourceSet).sort(),
+      providerTypes: Array.from(providerTypeSet).sort(),
     };
   }, [logEntries]);
 
@@ -365,9 +426,10 @@ export function RequestLogs({ data, loading: parentLoading, providerMap, apiFilt
       if (filterSource && entry.source !== filterSource) return false;
       if (filterStatus === 'success' && entry.failed) return false;
       if (filterStatus === 'failed' && !entry.failed) return false;
+      if (filterProviderType && entry.providerType !== filterProviderType) return false;
       return true;
     });
-  }, [logEntries, filterApi, filterModel, filterSource, filterStatus]);
+  }, [logEntries, filterApi, filterModel, filterSource, filterStatus, filterProviderType]);
 
   // 虚拟滚动配置
   const rowVirtualizer = useVirtualizer({
@@ -396,13 +458,18 @@ export function RequestLogs({ data, loading: parentLoading, providerMap, apiFilt
     const stats = getStats(entry);
     const rateValue = parseFloat(stats.successRate);
     const disabled = isModelDisabled(entry.source, entry.model);
+    // 将 authIndex 映射为文件名
+    const authDisplayName = entry.authIndex || '-';
 
     return (
       <>
-        <td>{entry.authIndex}</td>
+        <td title={authDisplayName}>
+          {authDisplayName}
+        </td>
         <td title={entry.apiKey}>
           {maskSecret(entry.apiKey)}
         </td>
+        <td>{entry.providerType}</td>
         <td title={entry.model}>
           {entry.model}
         </td>
@@ -440,7 +507,7 @@ export function RequestLogs({ data, loading: parentLoading, providerMap, apiFilt
         <td>{formatNumber(entry.totalTokens)}</td>
         <td>{formatTimestamp(entry.timestamp)}</td>
         <td>
-          {entry.source && entry.source !== '-' && entry.source !== 'unknown' ? (
+          {entry.providerType.toLowerCase() === 'openai' && entry.source && entry.source !== '-' && entry.source !== 'unknown' ? (
             disabled ? (
               <span className={styles.disabledLabel}>
                 {t('monitor.logs.disabled')}
@@ -492,6 +559,16 @@ export function RequestLogs({ data, loading: parentLoading, providerMap, apiFilt
               <option key={api} value={api}>
                 {maskSecret(api)}
               </option>
+            ))}
+          </select>
+          <select
+            className={styles.logSelect}
+            value={filterProviderType}
+            onChange={(e) => setFilterProviderType(e.target.value)}
+          >
+            <option value="">{t('monitor.logs.all_provider_types')}</option>
+            {providerTypes.map((type) => (
+              <option key={type} value={type}>{type}</option>
             ))}
           </select>
           <select
@@ -559,6 +636,7 @@ export function RequestLogs({ data, loading: parentLoading, providerMap, apiFilt
                     <tr>
                       <th>{t('monitor.logs.header_auth')}</th>
                       <th>{t('monitor.logs.header_api')}</th>
+                      <th>{t('monitor.logs.header_request_type')}</th>
                       <th>{t('monitor.logs.header_model')}</th>
                       <th>{t('monitor.logs.header_source')}</th>
                       <th>{t('monitor.logs.header_status')}</th>

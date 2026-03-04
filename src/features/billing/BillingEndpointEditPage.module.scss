@@ -1,0 +1,139 @@
+@use '../../styles/variables.scss' as *;
+@use '../../styles/mixins' as *;
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+  max-width: 1020px;
+  margin: 0 auto;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  flex-wrap: wrap;
+}
+
+.rowLabel {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.mono {
+  font-family: $font-mono;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.dangerHint {
+  font-size: 12px;
+  color: var(--error-color);
+}
+
+.tierList {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.tierRow {
+  border: 1px solid var(--border-color);
+  border-radius: $radius-lg;
+  padding: $spacing-sm $spacing-md;
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.tierRowTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  flex-wrap: wrap;
+}
+
+.tierTitle {
+  font-weight: 800;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.tierActions {
+  display: flex;
+  gap: 6px;
+}
+
+.tierFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: $spacing-sm;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tierAddRow {
+  display: flex;
+  gap: $spacing-sm;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.calculatorGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: $spacing-sm;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.breakdownGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: $spacing-sm;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.breakdownItem {
+  padding: $spacing-sm $spacing-md;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-lg;
+  background: var(--bg-primary);
+}
+
+.breakdownLabel {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+.breakdownValue {
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.breakdownSub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-family: $font-mono;
+}
+

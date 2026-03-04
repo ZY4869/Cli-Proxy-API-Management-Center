@@ -8,9 +8,18 @@ import type {
   AntigravityQuotaInfo,
   AntigravityModelsPayload,
   GeminiCliParsedBucket,
-  GeminiCliQuotaBucketState
+  GeminiCliQuotaBucketState,
+  KimiUsagePayload,
+  KimiUsageDetail,
+  KimiLimitItem,
+  KimiLimitWindow,
+  KimiQuotaRow,
 } from '@/types';
-import { ANTIGRAVITY_QUOTA_GROUPS, GEMINI_CLI_GROUP_LOOKUP } from './constants';
+import {
+  ANTIGRAVITY_QUOTA_GROUPS,
+  GEMINI_CLI_GROUP_LOOKUP,
+  GEMINI_CLI_GROUP_ORDER,
+} from './constants';
 import { normalizeQuotaFraction } from './parsers';
 import { isIgnoredGeminiCliModel } from './validators';
 
@@ -35,7 +44,19 @@ export function buildGeminiCliQuotaBuckets(
 ): GeminiCliQuotaBucketState[] {
   if (buckets.length === 0) return [];
 
-  const grouped = new Map<string, GeminiCliQuotaBucketState & { modelIds: string[] }>();
+  type GeminiCliQuotaBucketGroup = {
+    id: string;
+    label: string;
+    tokenType: string | null;
+    modelIds: string[];
+    preferredModelId?: string;
+    preferredBucket?: GeminiCliParsedBucket;
+    fallbackRemainingFraction: number | null;
+    fallbackRemainingAmount: number | null;
+    fallbackResetTime: string | undefined;
+  };
+
+  const grouped = new Map<string, GeminiCliQuotaBucketGroup>();
 
   buckets.forEach((bucket) => {
     if (isIgnoredGeminiCliModel(bucket.modelId)) return;
@@ -47,39 +68,73 @@ export function buildGeminiCliQuotaBuckets(
     const existing = grouped.get(mapKey);
 
     if (!existing) {
+      const preferredModelId = group?.preferredModelId;
+      const preferredBucket =
+        preferredModelId && bucket.modelId === preferredModelId ? bucket : undefined;
       grouped.set(mapKey, {
         id: `${groupId}${tokenKey ? `-${tokenKey}` : ''}`,
         label,
-        remainingFraction: bucket.remainingFraction,
-        remainingAmount: bucket.remainingAmount,
-        resetTime: bucket.resetTime,
         tokenType: bucket.tokenType,
-        modelIds: [bucket.modelId]
+        modelIds: [bucket.modelId],
+        preferredModelId,
+        preferredBucket,
+        fallbackRemainingFraction: bucket.remainingFraction,
+        fallbackRemainingAmount: bucket.remainingAmount,
+        fallbackResetTime: bucket.resetTime,
       });
       return;
     }
 
-    existing.remainingFraction = minNullableNumber(
-      existing.remainingFraction,
+    existing.fallbackRemainingFraction = minNullableNumber(
+      existing.fallbackRemainingFraction,
       bucket.remainingFraction
     );
-    existing.remainingAmount = minNullableNumber(existing.remainingAmount, bucket.remainingAmount);
-    existing.resetTime = pickEarlierResetTime(existing.resetTime, bucket.resetTime);
+    existing.fallbackRemainingAmount = minNullableNumber(
+      existing.fallbackRemainingAmount,
+      bucket.remainingAmount
+    );
+    existing.fallbackResetTime = pickEarlierResetTime(existing.fallbackResetTime, bucket.resetTime);
     existing.modelIds.push(bucket.modelId);
+
+    if (existing.preferredModelId && bucket.modelId === existing.preferredModelId) {
+      existing.preferredBucket = bucket;
+    }
   });
 
-  return Array.from(grouped.values()).map((bucket) => {
-    const uniqueModelIds = Array.from(new Set(bucket.modelIds));
-    return {
-      id: bucket.id,
-      label: bucket.label,
-      remainingFraction: bucket.remainingFraction,
-      remainingAmount: bucket.remainingAmount,
-      resetTime: bucket.resetTime,
-      tokenType: bucket.tokenType,
-      modelIds: uniqueModelIds
-    };
-  });
+  const toGroupOrder = (bucket: GeminiCliQuotaBucketGroup): number => {
+    const tokenSuffix = bucket.tokenType ? `-${bucket.tokenType}` : '';
+    const groupId = bucket.id.endsWith(tokenSuffix)
+      ? bucket.id.slice(0, bucket.id.length - tokenSuffix.length)
+      : bucket.id;
+    return GEMINI_CLI_GROUP_ORDER.get(groupId) ?? Number.MAX_SAFE_INTEGER;
+  };
+
+  return Array.from(grouped.values())
+    .sort((a, b) => {
+      const orderDiff = toGroupOrder(a) - toGroupOrder(b);
+      if (orderDiff !== 0) return orderDiff;
+      const tokenTypeA = a.tokenType ?? '';
+      const tokenTypeB = b.tokenType ?? '';
+      return tokenTypeA.localeCompare(tokenTypeB);
+    })
+    .map((bucket) => {
+      const uniqueModelIds = Array.from(new Set(bucket.modelIds));
+      const preferred = bucket.preferredBucket;
+      const remainingFraction = preferred
+        ? preferred.remainingFraction
+        : bucket.fallbackRemainingFraction;
+      const remainingAmount = preferred ? preferred.remainingAmount : bucket.fallbackRemainingAmount;
+      const resetTime = preferred ? preferred.resetTime : bucket.fallbackResetTime;
+      return {
+        id: bucket.id,
+        label: bucket.label,
+        remainingFraction,
+        remainingAmount,
+        resetTime,
+        tokenType: bucket.tokenType,
+        modelIds: uniqueModelIds,
+      };
+    });
 }
 
 export function getAntigravityQuotaInfo(entry?: AntigravityQuotaInfo): {
@@ -101,7 +156,7 @@ export function getAntigravityQuotaInfo(entry?: AntigravityQuotaInfo): {
   return {
     remainingFraction,
     resetTime,
-    displayName
+    displayName,
   };
 }
 
@@ -129,9 +184,9 @@ export function buildAntigravityQuotaGroups(
   models: AntigravityModelsPayload
 ): AntigravityQuotaGroup[] {
   const groups: AntigravityQuotaGroup[] = [];
-  let geminiProResetTime: string | undefined;
-  const [claudeDef, geminiProDef, flashDef, flashLiteDef, cuDef, geminiFlashDef, imageDef] =
-    ANTIGRAVITY_QUOTA_GROUPS;
+  const definitions = new Map(
+    ANTIGRAVITY_QUOTA_GROUPS.map((definition) => [definition.id, definition] as const)
+  );
 
   const buildGroup = (
     def: AntigravityQuotaGroupDefinition,
@@ -150,7 +205,7 @@ export function buildAntigravityQuotaGroups(
           id,
           remainingFraction,
           resetTime: info.resetTime,
-          displayName: info.displayName
+          displayName: info.displayName,
         };
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
@@ -168,45 +223,185 @@ export function buildAntigravityQuotaGroups(
       label,
       models: quotaEntries.map((entry) => entry.id),
       remainingFraction,
-      resetTime
+      resetTime,
     };
   };
 
-  const claudeGroup = buildGroup(claudeDef);
-  if (claudeGroup) {
-    groups.push(claudeGroup);
-  }
+  const appendGroup = (
+    id: string,
+    overrideResetTime?: string
+  ): AntigravityQuotaGroup | null => {
+    const definition = definitions.get(id);
+    if (!definition) return null;
+    const group = buildGroup(definition, overrideResetTime);
+    if (group) {
+      groups.push(group);
+    }
+    return group;
+  };
 
-  const geminiProGroup = buildGroup(geminiProDef);
-  if (geminiProGroup) {
-    geminiProResetTime = geminiProGroup.resetTime;
-    groups.push(geminiProGroup);
-  }
-
-  const flashGroup = buildGroup(flashDef);
-  if (flashGroup) {
-    groups.push(flashGroup);
-  }
-
-  const flashLiteGroup = buildGroup(flashLiteDef);
-  if (flashLiteGroup) {
-    groups.push(flashLiteGroup);
-  }
-
-  const cuGroup = buildGroup(cuDef);
-  if (cuGroup) {
-    groups.push(cuGroup);
-  }
-
-  const geminiFlashGroup = buildGroup(geminiFlashDef);
-  if (geminiFlashGroup) {
-    groups.push(geminiFlashGroup);
-  }
-
-  const imageGroup = buildGroup(imageDef, geminiProResetTime);
-  if (imageGroup) {
-    groups.push(imageGroup);
-  }
+  appendGroup('claude-gpt');
+  const gemini31ProGroup = appendGroup('gemini-3-1-pro-series');
+  const geminiProGroup = appendGroup('gemini-3-pro');
+  const geminiProResetTime = gemini31ProGroup?.resetTime ?? geminiProGroup?.resetTime;
+  appendGroup('gemini-2-5-flash');
+  appendGroup('gemini-2-5-flash-lite');
+  appendGroup('gemini-2-5-cu');
+  appendGroup('gemini-3-flash');
+  appendGroup('gemini-image', geminiProResetTime);
 
   return groups;
+}
+
+function toInt(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.floor(value);
+  if (typeof value === 'string') {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? Math.floor(parsed) : null;
+  }
+  return null;
+}
+
+type KimiRowLabel = Pick<KimiQuotaRow, 'label' | 'labelKey' | 'labelParams'>;
+
+function kimiResetHint(data: Record<string, unknown>): string | undefined {
+  const absoluteKeys = ['reset_at', 'resetAt', 'reset_time', 'resetTime'];
+  for (const key of absoluteKeys) {
+    const raw = data[key];
+    if (typeof raw === 'string' && raw.trim()) {
+      try {
+        const truncated = raw.replace(/(\.\d{6})\d+/, '$1');
+        const date = new Date(truncated);
+        if (Number.isNaN(date.getTime())) continue;
+        const now = Date.now();
+        const delta = date.getTime() - now;
+        if (delta <= 0) return undefined;
+        const totalMinutes = Math.floor(delta / 60000);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+        if (hours > 0) return `${hours}h`;
+        if (minutes > 0) return `${minutes}m`;
+        return '<1m';
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  const relativeKeys = ['reset_in', 'resetIn', 'ttl'];
+  for (const key of relativeKeys) {
+    const raw = toInt(data[key]);
+    if (raw !== null && raw > 0) {
+      const hours = Math.floor(raw / 3600);
+      const minutes = Math.floor((raw % 3600) / 60);
+      if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+      if (hours > 0) return `${hours}h`;
+      if (minutes > 0) return `${minutes}m`;
+      return '<1m';
+    }
+  }
+
+  return undefined;
+}
+
+function kimiDurationToken(duration: number, rawTimeUnit: unknown): string {
+  const unit = typeof rawTimeUnit === 'string' ? rawTimeUnit.trim().toUpperCase() : '';
+  if (unit === 'MINUTES') {
+    return duration % 60 === 0 ? `${duration / 60}h` : `${duration}m`;
+  }
+  if (unit === 'HOURS') return `${duration}h`;
+  if (unit === 'DAYS') return `${duration}d`;
+  return `${duration}s`;
+}
+
+function kimiLimitLabel(
+  item: KimiLimitItem,
+  detail: KimiUsageDetail | KimiLimitItem,
+  window: KimiLimitWindow,
+  index: number
+): KimiRowLabel {
+  for (const key of ['name', 'title', 'scope'] as const) {
+    const val = (item as Record<string, unknown>)[key] ?? (detail as Record<string, unknown>)[key];
+    if (typeof val === 'string' && val.trim()) return { label: val.trim() };
+  }
+
+  const duration =
+    toInt(window.duration) ??
+    toInt((item as Record<string, unknown>).duration) ??
+    toInt((detail as Record<string, unknown>).duration);
+  const timeUnit =
+    (window as Record<string, unknown>).timeUnit ??
+    (item as Record<string, unknown>).timeUnit ??
+    (detail as Record<string, unknown>).timeUnit;
+
+  if (duration !== null && duration > 0) {
+    return {
+      labelKey: 'kimi_quota.limit_window',
+      labelParams: {
+        duration: kimiDurationToken(duration, timeUnit),
+      },
+    };
+  }
+
+  return {
+    labelKey: 'kimi_quota.limit_index',
+    labelParams: {
+      index: index + 1,
+    },
+  };
+}
+
+function toKimiUsageRow(
+  data: Record<string, unknown>,
+  fallbackLabel: KimiRowLabel
+): (KimiRowLabel & { used: number; limit: number; resetHint?: string }) | null {
+  const limit = toInt(data.limit);
+  let used = toInt(data.used);
+  if (used === null) {
+    const remaining = toInt(data.remaining);
+    if (remaining !== null && limit !== null) {
+      used = limit - remaining;
+    }
+  }
+  if (used === null && limit === null) return null;
+  const explicitLabel =
+    (typeof data.name === 'string' && data.name.trim()) ||
+    (typeof data.title === 'string' && data.title.trim());
+  const label = explicitLabel ? { label: explicitLabel } : fallbackLabel;
+  return {
+    ...label,
+    used: used ?? 0,
+    limit: limit ?? 0,
+    resetHint: kimiResetHint(data),
+  };
+}
+
+export function buildKimiQuotaRows(payload: KimiUsagePayload): KimiQuotaRow[] {
+  const rows: KimiQuotaRow[] = [];
+
+  const usage = payload.usage;
+  if (usage && typeof usage === 'object') {
+    const summary = toKimiUsageRow(usage as Record<string, unknown>, {
+      labelKey: 'kimi_quota.weekly_limit',
+    });
+    if (summary) {
+      rows.push({ id: 'summary', ...summary });
+    }
+  }
+
+  const limits = payload.limits;
+  if (Array.isArray(limits)) {
+    limits.forEach((item, idx) => {
+      const detail = (item.detail && typeof item.detail === 'object' ? item.detail : item) as KimiUsageDetail | KimiLimitItem;
+      const window = (item.window && typeof item.window === 'object' ? item.window : {}) as KimiLimitWindow;
+      const fallbackLabel = kimiLimitLabel(item, detail, window, idx);
+      const row = toKimiUsageRow(detail as Record<string, unknown>, fallbackLabel);
+      if (row) {
+        rows.push({ id: `limit-${idx}`, ...row });
+      }
+    });
+  }
+
+  return rows;
 }

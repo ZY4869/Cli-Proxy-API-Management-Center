@@ -14,9 +14,20 @@ function getVersion(): string {
 
   // 2. Try git tag
   try {
-    const gitTag = execSync('git describe --tags --exact-match 2>/dev/null || git describe --tags 2>/dev/null || echo ""', { encoding: 'utf8' }).trim();
-    if (gitTag) {
-      return gitTag;
+    const execOpts = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] as const };
+
+    try {
+      const gitTagExact = execSync('git describe --tags --exact-match', execOpts).trim();
+      if (gitTagExact) return gitTagExact;
+    } catch {
+      // ignore
+    }
+
+    try {
+      const gitTag = execSync('git describe --tags', execOpts).trim();
+      if (gitTag) return gitTag;
+    } catch {
+      // ignore
     }
   } catch {
     // Git not available or no tags
@@ -63,7 +74,7 @@ export default defineConfig({
     }
   },
   build: {
-    target: 'es2015',
+    target: 'es2020',
     outDir: 'dist',
     assetsInlineLimit: 100000000,
     chunkSizeWarningLimit: 100000000,

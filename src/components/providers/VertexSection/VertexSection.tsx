@@ -5,13 +5,16 @@ import { Card } from '@/components/ui/Card';
 import iconVertex from '@/assets/icons/vertex.svg';
 import type { ProviderKeyConfig } from '@/types';
 import { maskApiKey } from '@/utils/format';
-import { calculateStatusBarData, type KeyStats, type UsageDetail } from '@/utils/usage';
+import {
+  buildCandidateUsageSourceIds,
+  calculateStatusBarData,
+  type KeyStats,
+  type UsageDetail,
+} from '@/utils/usage';
 import styles from '@/pages/AiProvidersPage.module.scss';
 import { ProviderList } from '../ProviderList';
 import { ProviderStatusBar } from '../ProviderStatusBar';
 import { getStatsBySource } from '../utils';
-import type { VertexFormState } from '../types';
-import { VertexModal } from './VertexModal';
 
 interface VertexSectionProps {
   configs: ProviderKeyConfig[];
@@ -19,15 +22,10 @@ interface VertexSectionProps {
   usageDetails: UsageDetail[];
   loading: boolean;
   disableControls: boolean;
-  isSaving: boolean;
   isSwitching: boolean;
-  isModalOpen: boolean;
-  modalIndex: number | null;
   onAdd: () => void;
   onEdit: (index: number) => void;
   onDelete: (index: number) => void;
-  onCloseModal: () => void;
-  onSave: (data: VertexFormState, index: number | null) => Promise<void>;
 }
 
 export function VertexSection({
@@ -36,30 +34,31 @@ export function VertexSection({
   usageDetails,
   loading,
   disableControls,
-  isSaving,
   isSwitching,
-  isModalOpen,
-  modalIndex,
   onAdd,
   onEdit,
   onDelete,
-  onCloseModal,
-  onSave,
 }: VertexSectionProps) {
   const { t } = useTranslation();
-  const actionsDisabled = disableControls || isSaving || isSwitching;
+  const actionsDisabled = disableControls || loading || isSwitching;
 
   const statusBarCache = useMemo(() => {
     const cache = new Map<string, ReturnType<typeof calculateStatusBarData>>();
-    const allApiKeys = new Set<string>();
-    configs.forEach((config) => config.apiKey && allApiKeys.add(config.apiKey));
-    allApiKeys.forEach((apiKey) => {
-      cache.set(apiKey, calculateStatusBarData(usageDetails, apiKey));
+
+    configs.forEach((config) => {
+      if (!config.apiKey) return;
+      const candidates = buildCandidateUsageSourceIds({
+        apiKey: config.apiKey,
+        prefix: config.prefix,
+      });
+      if (!candidates.length) return;
+      const candidateSet = new Set(candidates);
+      const filteredDetails = usageDetails.filter((detail) => candidateSet.has(detail.source));
+      cache.set(config.apiKey, calculateStatusBarData(filteredDetails));
     });
+
     return cache;
   }, [configs, usageDetails]);
-
-  const initialData = modalIndex !== null ? configs[modalIndex] : undefined;
 
   return (
     <>
@@ -86,10 +85,9 @@ export function VertexSection({
           onDelete={onDelete}
           actionsDisabled={actionsDisabled}
           renderContent={(item, index) => {
-            const stats = getStatsBySource(item.apiKey, keyStats, maskApiKey);
+            const stats = getStatsBySource(item.apiKey, keyStats, item.prefix);
             const headerEntries = Object.entries(item.headers || {});
-            const statusData =
-              statusBarCache.get(item.apiKey) || calculateStatusBarData([], item.apiKey);
+            const statusData = statusBarCache.get(item.apiKey) || calculateStatusBarData([]);
 
             return (
               <Fragment>
@@ -156,15 +154,6 @@ export function VertexSection({
           }}
         />
       </Card>
-
-      <VertexModal
-        isOpen={isModalOpen}
-        editIndex={modalIndex}
-        initialData={initialData}
-        onClose={onCloseModal}
-        onSave={onSave}
-        isSaving={isSaving}
-      />
     </>
   );
 }

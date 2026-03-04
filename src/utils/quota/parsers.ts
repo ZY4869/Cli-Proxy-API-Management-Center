@@ -2,18 +2,11 @@
  * Normalization and parsing functions for quota data.
  */
 
-import type { CodexUsagePayload, GeminiCliQuotaPayload } from '@/types';
+import type { ClaudeUsagePayload, CodexUsagePayload, GeminiCliQuotaPayload, KiroQuotaPayload, KimiUsagePayload } from '@/types';
+import { normalizeAuthIndex } from '@/utils/usage';
 
-export function normalizeAuthIndexValue(value: unknown): string | null {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value.toString();
-  }
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return trimmed ? trimmed : null;
-  }
-  return null;
-}
+const GEMINI_CLI_MODEL_SUFFIX = '_vertex';
+export { normalizeAuthIndex };
 
 export function normalizeStringValue(value: unknown): string | null {
   if (typeof value === 'string') {
@@ -24,6 +17,15 @@ export function normalizeStringValue(value: unknown): string | null {
     return value.toString();
   }
   return null;
+}
+
+export function normalizeGeminiCliModelId(value: unknown): string | null {
+  const modelId = normalizeStringValue(value);
+  if (!modelId) return null;
+  if (modelId.endsWith(GEMINI_CLI_MODEL_SUFFIX)) {
+    return modelId.slice(0, -GEMINI_CLI_MODEL_SUFFIX.length);
+  }
+  return modelId;
 }
 
 export function normalizeNumberValue(value: unknown): number | null {
@@ -102,18 +104,55 @@ export function parseIdTokenPayload(value: unknown): Record<string, unknown> | n
 }
 
 export function parseAntigravityPayload(payload: unknown): Record<string, unknown> | null {
+  const toRecord = (value: unknown): Record<string, unknown> | null => {
+    if (value === undefined || value === null) return null;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+      } catch {
+        return null;
+      }
+      return null;
+    }
+    if (typeof value === 'object' && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+    return null;
+  };
+
+  const parsed = toRecord(payload);
+  if (!parsed) return null;
+
+  if ('models' in parsed) {
+    return parsed;
+  }
+
+  const nested = toRecord(parsed.body);
+  if (nested) {
+    return nested;
+  }
+
+  return parsed;
+}
+
+export function parseClaudeUsagePayload(payload: unknown): ClaudeUsagePayload | null {
   if (payload === undefined || payload === null) return null;
   if (typeof payload === 'string') {
     const trimmed = payload.trim();
     if (!trimmed) return null;
     try {
-      return JSON.parse(trimmed) as Record<string, unknown>;
+      return JSON.parse(trimmed) as ClaudeUsagePayload;
     } catch {
       return null;
     }
   }
   if (typeof payload === 'object') {
-    return payload as Record<string, unknown>;
+    return payload as ClaudeUsagePayload;
   }
   return null;
 }
@@ -148,6 +187,57 @@ export function parseGeminiCliQuotaPayload(payload: unknown): GeminiCliQuotaPayl
   }
   if (typeof payload === 'object') {
     return payload as GeminiCliQuotaPayload;
+  }
+  return null;
+}
+
+export function parseKiroQuotaPayload(payload: unknown): KiroQuotaPayload | null {
+  if (payload === undefined || payload === null) return null;
+  if (typeof payload === 'string') {
+    const trimmed = payload.trim();
+    if (!trimmed) return null;
+    try {
+      return JSON.parse(trimmed) as KiroQuotaPayload;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof payload === 'object') {
+    return payload as KiroQuotaPayload;
+  }
+  return null;
+}
+
+export function parseKiroErrorPayload(payload: unknown): { reason?: string; message?: string } | null {
+  if (payload === undefined || payload === null) return null;
+  if (typeof payload === 'string') {
+    const trimmed = payload.trim();
+    if (!trimmed) return null;
+    try {
+      return JSON.parse(trimmed) as { reason?: string; message?: string };
+    } catch {
+      return null;
+    }
+  }
+  if (typeof payload === 'object') {
+    return payload as { reason?: string; message?: string };
+  }
+  return null;
+}
+
+export function parseKimiUsagePayload(payload: unknown): KimiUsagePayload | null {
+  if (payload === undefined || payload === null) return null;
+  if (typeof payload === 'string') {
+    const trimmed = payload.trim();
+    if (!trimmed) return null;
+    try {
+      return JSON.parse(trimmed) as KimiUsagePayload;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof payload === 'object') {
+    return payload as KimiUsagePayload;
   }
   return null;
 }

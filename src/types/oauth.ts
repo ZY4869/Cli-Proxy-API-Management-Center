@@ -9,6 +9,7 @@ export type OAuthProvider =
   | 'anthropic'
   | 'antigravity'
   | 'gemini-cli'
+  | 'kimi'
   | 'qwen';
 
 // OAuth 流程状态
@@ -34,11 +35,11 @@ export interface OAuthExcludedModels {
   models: string[];
 }
 
-// OAuth 模型映射
-export interface OAuthModelMappingEntry {
+// OAuth 模型别名
+export interface OAuthModelAliasEntry {
   name: string;
   alias: string;
   fork?: boolean;
 }
 
-export type OAuthModelMappings = Record<string, OAuthModelMappingEntry[]>;
+export type OAuthModelAlias = Record<string, OAuthModelAliasEntry[]>;

@@ -55,6 +55,7 @@ export interface AntigravityQuotaGroupDefinition {
 export interface GeminiCliQuotaGroupDefinition {
   id: string;
   label: string;
+  preferredModelId?: string;
   modelIds: string[];
 }
 
@@ -87,6 +88,15 @@ export interface CodexRateLimitInfo {
   secondaryWindow?: CodexUsageWindow | null;
 }
 
+export interface CodexAdditionalRateLimit {
+  limit_name?: string;
+  limitName?: string;
+  metered_feature?: string;
+  meteredFeature?: string;
+  rate_limit?: CodexRateLimitInfo | null;
+  rateLimit?: CodexRateLimitInfo | null;
+}
+
 export interface CodexUsagePayload {
   plan_type?: string;
   planType?: string;
@@ -94,6 +104,48 @@ export interface CodexUsagePayload {
   rateLimit?: CodexRateLimitInfo | null;
   code_review_rate_limit?: CodexRateLimitInfo | null;
   codeReviewRateLimit?: CodexRateLimitInfo | null;
+  additional_rate_limits?: CodexAdditionalRateLimit[] | null;
+  additionalRateLimits?: CodexAdditionalRateLimit[] | null;
+}
+
+// Claude API payload types
+export interface ClaudeUsageWindow {
+  utilization: number;
+  resets_at: string;
+}
+
+export interface ClaudeExtraUsage {
+  is_enabled: boolean;
+  monthly_limit: number;
+  used_credits: number;
+  utilization: number | null;
+}
+
+export interface ClaudeUsagePayload {
+  five_hour?: ClaudeUsageWindow | null;
+  seven_day?: ClaudeUsageWindow | null;
+  seven_day_oauth_apps?: ClaudeUsageWindow | null;
+  seven_day_opus?: ClaudeUsageWindow | null;
+  seven_day_sonnet?: ClaudeUsageWindow | null;
+  seven_day_cowork?: ClaudeUsageWindow | null;
+  iguana_necktie?: ClaudeUsageWindow | null;
+  extra_usage?: ClaudeExtraUsage | null;
+}
+
+export interface ClaudeQuotaWindow {
+  id: string;
+  label: string;
+  labelKey?: string;
+  usedPercent: number | null;
+  resetLabel: string;
+}
+
+export interface ClaudeQuotaState {
+  status: 'idle' | 'loading' | 'success' | 'error';
+  windows: ClaudeQuotaWindow[];
+  extraUsage?: ClaudeExtraUsage | null;
+  error?: string;
+  errorStatus?: number;
 }
 
 // Quota state types
@@ -133,6 +185,7 @@ export interface CodexQuotaWindow {
   id: string;
   label: string;
   labelKey?: string;
+  labelParams?: Record<string, string | number>;
   usedPercent: number | null;
   resetLabel: string;
 }
@@ -141,6 +194,128 @@ export interface CodexQuotaState {
   status: 'idle' | 'loading' | 'success' | 'error';
   windows: CodexQuotaWindow[];
   planType?: string | null;
+  error?: string;
+  errorStatus?: number;
+}
+
+// Kiro (AWS CodeWhisperer) API payload types
+export interface KiroSubscriptionInfo {
+  subscriptionTitle: string;
+  type?: string;
+  overageCapability?: string;
+  upgradeCapability?: string;
+}
+
+export interface KiroFreeTrialInfo {
+  freeTrialStatus: string;
+  usageLimitWithPrecision: number;
+  currentUsageWithPrecision: number;
+  freeTrialExpiry: number;
+}
+
+export interface KiroUsageBreakdown {
+  resourceType: string;
+  usageLimitWithPrecision: number;
+  currentUsageWithPrecision: number;
+  nextDateReset?: number;
+  freeTrialInfo?: KiroFreeTrialInfo;
+  overageRate?: number;
+  currency?: string;
+}
+
+export interface KiroQuotaPayload {
+  daysUntilReset?: number;
+  nextDateReset: number;
+  subscriptionInfo: KiroSubscriptionInfo;
+  usageBreakdownList: KiroUsageBreakdown[];
+  userInfo?: { userId: string };
+}
+
+export interface KiroQuotaErrorPayload {
+  __type?: string;
+  message?: string;
+  reason?: string;
+}
+
+export interface KiroBaseQuota {
+  used: number;
+  limit: number;
+  resetTime: number;
+}
+
+export interface KiroFreeTrialQuota {
+  used: number;
+  limit: number;
+  expiry: number;
+  status: string;
+}
+
+export interface KiroQuotaState {
+  status: 'idle' | 'loading' | 'success' | 'error';
+  subscriptionTitle: string | null;
+  baseQuota: KiroBaseQuota | null;
+  freeTrialQuota: KiroFreeTrialQuota | null;
+  error?: string;
+  errorStatus?: number;
+}
+
+// Kimi API payload types
+export interface KimiUsageDetail {
+  used?: number;
+  limit?: number;
+  remaining?: number;
+  name?: string;
+  title?: string;
+  resetAt?: string;
+  reset_at?: string;
+  resetTime?: string;
+  reset_time?: string;
+  resetIn?: number;
+  reset_in?: number;
+  ttl?: number;
+}
+
+export interface KimiLimitWindow {
+  duration?: number;
+  timeUnit?: string;
+}
+
+export interface KimiLimitItem {
+  name?: string;
+  title?: string;
+  scope?: string;
+  detail?: KimiUsageDetail;
+  window?: KimiLimitWindow;
+  used?: number;
+  limit?: number;
+  remaining?: number;
+  duration?: number;
+  timeUnit?: string;
+  resetAt?: string;
+  reset_at?: string;
+  resetIn?: number;
+  reset_in?: number;
+  ttl?: number;
+}
+
+export interface KimiUsagePayload {
+  usage?: KimiUsageDetail;
+  limits?: KimiLimitItem[];
+}
+
+export interface KimiQuotaRow {
+  id: string;
+  label?: string;
+  labelKey?: string;
+  labelParams?: Record<string, string | number>;
+  used: number;
+  limit: number;
+  resetHint?: string;
+}
+
+export interface KimiQuotaState {
+  status: 'idle' | 'loading' | 'success' | 'error';
+  rows: KimiQuotaRow[];
   error?: string;
   errorStatus?: number;
 }
