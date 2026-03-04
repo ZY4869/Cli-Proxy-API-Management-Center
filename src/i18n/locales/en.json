@@ -118,8 +118,12 @@
     "logs": "Logs Viewer",
     "system_info": "Management Center Info",
     "monitor": "Monitor Center",
+<<<<<<< HEAD
     "backup": "Data Backup",
     "billing": "Billing"
+=======
+    "backup": "Data Backup"
+>>>>>>> 66147c05f4762a9216c7de11145744a2835d57b6
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1681,6 +1685,7 @@
     "scope_preferences_hint": "Theme, language, sidebar state, etc.",
     "scope_config_restore_hint": "View only, will not write to backend automatically",
     "scope_usage_hint": "Import usage statistics to backend"
+<<<<<<< HEAD
   },
   "billing": {
     "title": "Billing",
@@ -1802,5 +1807,7 @@
     "model_prices_empty_models": "No models found. Connect and refresh, or load Usage data to show fallback models.",
     "model_prices_saved": "Saved model price",
     "model_prices_deleted": "Deleted model price"
+=======
+>>>>>>> 66147c05f4762a9216c7de11145744a2835d57b6
   }
 }

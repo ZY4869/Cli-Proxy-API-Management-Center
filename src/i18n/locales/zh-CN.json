@@ -118,8 +118,12 @@
     "logs": "日志查看",
     "system_info": "中心信息",
     "monitor": "监控中心",
+<<<<<<< HEAD
     "backup": "数据备份",
     "billing": "计费"
+=======
+    "backup": "数据备份"
+>>>>>>> 66147c05f4762a9216c7de11145744a2835d57b6
   },
   "dashboard": {
     "title": "仪表盘",
@@ -1681,6 +1685,7 @@
     "scope_preferences_hint": "主题、语言、侧边栏状态等",
     "scope_config_restore_hint": "仅查看，不会自动写入后端",
     "scope_usage_hint": "导入使用统计到后端"
+<<<<<<< HEAD
   },
   "billing": {
     "title": "计费",
@@ -1802,5 +1807,7 @@
     "model_prices_empty_models": "未获取到模型列表。请连接后刷新，或导入 Usage 数据以显示回退模型。",
     "model_prices_saved": "已保存模型价格",
     "model_prices_deleted": "已删除模型价格"
+=======
+>>>>>>> 66147c05f4762a9216c7de11145744a2835d57b6
   }
 }
