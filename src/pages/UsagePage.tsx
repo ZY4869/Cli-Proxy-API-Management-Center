@@ -13,7 +13,6 @@ import {
   Filler
 } from 'chart.js';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Select } from '@/components/ui/Select';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
@@ -36,15 +35,16 @@ import {
   useChartData
 } from '@/components/usage';
 import {
+  collectUsageDetailsWithEndpoint,
   getModelNamesFromUsage,
-  getApiStats,
-  getModelStats,
   filterUsageByTimeRange,
   type UsageTimeRange
 } from '@/utils/usage';
-import { useBillingStore } from '@/features/billing/store/useBillingStore';
-import type { CostMode } from '@/features/billing/types';
-import { buildEndpointApiStats, buildEndpointModelStats } from '@/features/billing/utils/endpointStats';
+import { buildModelPricingAnalytics } from '@/features/billing/modelPricing/analytics';
+import { useModelPricingStore } from '@/features/billing/modelPricing/useModelPricingStore';
+import type { CurrencySymbol } from '@/features/billing/modelPricing/types';
+import { loadSelectedCurrency, resolveSelectedCurrency, saveSelectedCurrency } from '@/features/billing/modelPricing/selectedCurrency';
+import { getApiStatsWithModelPricing, getModelStatsWithModelPricing } from '@/features/billing/modelPricing/usageCosting';
 import styles from './UsagePage.module.scss';
 
 // Register Chart.js components
@@ -75,10 +75,6 @@ const HOUR_WINDOW_BY_TIME_RANGE: Record<Exclude<UsageTimeRange, 'all'>, number> 
   '24h': 24,
   '7d': 7 * 24
 };
-const COST_MODE_OPTIONS: ReadonlyArray<{ value: CostMode; labelKey: string }> = [
-  { value: 'model', labelKey: 'usage_stats.cost_mode_model' },
-  { value: 'endpoint', labelKey: 'usage_stats.cost_mode_endpoint' },
-];
 
 const isUsageTimeRange = (value: unknown): value is UsageTimeRange =>
   value === '7h' || value === '24h' || value === '7d' || value === 'all';
@@ -131,10 +127,8 @@ export function UsagePage() {
   const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const isDark = resolvedTheme === 'dark';
   const config = useConfigStore((state) => state.config);
-  const costMode = useBillingStore((state) => state.costMode);
-  const setCostMode = useBillingStore((state) => state.setCostMode);
-  const billingDefaultRule = useBillingStore((state) => state.defaultRule);
-  const billingEndpointRules = useBillingStore((state) => state.endpointRules);
+  const pricingByModel = useModelPricingStore((s) => s.pricingByModel);
+  const hasPricingConfig = useMemo(() => Object.keys(pricingByModel).length > 0, [pricingByModel]);
 
   // Data hook
   const {
@@ -142,8 +136,6 @@ export function UsagePage() {
     loading,
     error,
     lastRefreshedAt,
-    modelPrices,
-    setModelPrices,
     loadUsage,
     handleExport,
     handleImport,
@@ -158,6 +150,7 @@ export function UsagePage() {
   // Chart lines state
   const [chartLines, setChartLines] = useState<string[]>(loadChartLines);
   const [timeRange, setTimeRange] = useState<UsageTimeRange>(loadTimeRange);
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencySymbol>(() => loadSelectedCurrency());
 
   const timeRangeOptions = useMemo(
     () =>
@@ -167,13 +160,9 @@ export function UsagePage() {
       })),
     [t]
   );
-  const costModeOptions = useMemo(
-    () =>
-      COST_MODE_OPTIONS.map((opt) => ({
-        value: opt.value,
-        label: t(opt.labelKey)
-      })),
-    [t]
+  const timeRangeLabel = useMemo(
+    () => timeRangeOptions.find((opt) => opt.value === timeRange)?.label ?? '',
+    [timeRange, timeRangeOptions]
   );
 
   const filteredUsage = useMemo(
@@ -182,6 +171,29 @@ export function UsagePage() {
   );
   const hourWindowHours =
     timeRange === 'all' ? undefined : HOUR_WINDOW_BY_TIME_RANGE[timeRange];
+  const pricingDetails = useMemo(
+    () => (filteredUsage ? collectUsageDetailsWithEndpoint(filteredUsage) : []),
+    [filteredUsage]
+  );
+  const pricingAnalytics = useMemo(
+    () => buildModelPricingAnalytics(pricingDetails, pricingByModel, { hourWindowHours, now: lastRefreshedAt ?? undefined }),
+    [hourWindowHours, lastRefreshedAt, pricingByModel, pricingDetails]
+  );
+  const currencyOptions = useMemo(
+    () => pricingAnalytics.currenciesInUse.map((c) => ({ value: c, label: c })),
+    [pricingAnalytics.currenciesInUse]
+  );
+  const resolvedSelectedCurrency = useMemo(
+    () => resolveSelectedCurrency(pricingAnalytics.currenciesInUse, selectedCurrency),
+    [pricingAnalytics.currenciesInUse, selectedCurrency]
+  );
+
+  useEffect(() => {
+    if (resolvedSelectedCurrency !== selectedCurrency) {
+      setSelectedCurrency(resolvedSelectedCurrency);
+    }
+    saveSelectedCurrency(resolvedSelectedCurrency);
+  }, [resolvedSelectedCurrency, selectedCurrency]);
 
   const handleChartLinesChange = useCallback((lines: string[]) => {
     setChartLines(normalizeChartLines(lines));
@@ -210,14 +222,6 @@ export function UsagePage() {
   }, [timeRange]);
 
   const nowMs = lastRefreshedAt?.getTime() ?? 0;
-  const billingConfig = useMemo(
-    () => ({ defaultRule: billingDefaultRule, endpointRules: billingEndpointRules }),
-    [billingDefaultRule, billingEndpointRules]
-  );
-  const hasEndpointPricing = useMemo(() => {
-    if (billingDefaultRule.enabled) return true;
-    return Object.values(billingEndpointRules).some((rule) => rule.enabled);
-  }, [billingDefaultRule.enabled, billingEndpointRules]);
 
   // Sparklines hook
   const {
@@ -242,20 +246,15 @@ export function UsagePage() {
 
   // Derived data
   const modelNames = useMemo(() => getModelNamesFromUsage(usage), [usage]);
-  const apiStats = useMemo(() => {
-    if (costMode === 'endpoint') {
-      return buildEndpointApiStats(filteredUsage, billingConfig);
-    }
-    return getApiStats(filteredUsage, modelPrices);
-  }, [billingConfig, costMode, filteredUsage, modelPrices]);
-  const modelStats = useMemo(() => {
-    if (costMode === 'endpoint') {
-      return buildEndpointModelStats(filteredUsage, billingConfig);
-    }
-    return getModelStats(filteredUsage, modelPrices);
-  }, [billingConfig, costMode, filteredUsage, modelPrices]);
-  const hasModelPrices = Object.keys(modelPrices).length > 0;
-  const hasPrices = costMode === 'model' ? hasModelPrices : true;
+  const apiStats = useMemo(
+    () => getApiStatsWithModelPricing(filteredUsage, pricingByModel, resolvedSelectedCurrency),
+    [filteredUsage, pricingByModel, resolvedSelectedCurrency]
+  );
+  const modelStats = useMemo(
+    () => getModelStatsWithModelPricing(filteredUsage, pricingByModel, resolvedSelectedCurrency),
+    [filteredUsage, pricingByModel, resolvedSelectedCurrency]
+  );
+  const hasPrices = hasPricingConfig && Boolean(resolvedSelectedCurrency);
 
   return (
     <div className={styles.container}>
@@ -272,17 +271,6 @@ export function UsagePage() {
         <h1 className={styles.pageTitle}>{t('usage_stats.title')}</h1>
         <div className={styles.headerActions}>
           <div className={styles.timeRangeGroup}>
-            <span className={styles.timeRangeLabel}>{t('usage_stats.cost_mode')}</span>
-            <Select
-              value={costMode}
-              options={costModeOptions}
-              onChange={(value) => setCostMode(value as CostMode)}
-              className={styles.timeRangeSelectControl}
-              ariaLabel={t('usage_stats.cost_mode')}
-              fullWidth={false}
-            />
-          </div>
-          <div className={styles.timeRangeGroup}>
             <span className={styles.timeRangeLabel}>{t('usage_stats.range_filter')}</span>
             <Select
               value={timeRange}
@@ -293,6 +281,19 @@ export function UsagePage() {
               fullWidth={false}
             />
           </div>
+          {pricingAnalytics.currenciesInUse.length > 1 ? (
+            <div className={styles.timeRangeGroup}>
+              <span className={styles.timeRangeLabel}>{t('billing.currency')}</span>
+              <Select
+                value={resolvedSelectedCurrency}
+                options={currencyOptions}
+                onChange={(value) => setSelectedCurrency(value as CurrencySymbol)}
+                className={styles.timeRangeSelectControl}
+                ariaLabel={t('billing.currency')}
+                fullWidth={false}
+              />
+            </div>
+          ) : null}
           <Button
             variant="secondary"
             size="sm"
@@ -340,10 +341,9 @@ export function UsagePage() {
       <StatCards
         usage={filteredUsage}
         loading={loading}
-        modelPrices={modelPrices}
-        costMode={costMode}
-        billingConfig={billingConfig}
-        hasEndpointPricing={hasEndpointPricing}
+        analytics={pricingAnalytics}
+        hasPricingConfig={hasPricingConfig}
+        selectedCurrency={resolvedSelectedCurrency}
         nowMs={nowMs}
         sparklines={{
           requests: requestsSparkline,
@@ -400,21 +400,19 @@ export function UsagePage() {
 
       {/* Cost Trend Chart */}
       <CostTrendChart
-        usage={filteredUsage}
         loading={loading}
         isDark={isDark}
         isMobile={isMobile}
-        modelPrices={modelPrices}
-        costMode={costMode}
-        billingConfig={billingConfig}
-        hasEndpointPricing={hasEndpointPricing}
-        hourWindowHours={hourWindowHours}
+        analytics={pricingAnalytics}
+        selectedCurrency={resolvedSelectedCurrency}
+        hasPricingConfig={hasPricingConfig}
+        timeRangeLabel={timeRangeLabel}
       />
 
       {/* Details Grid */}
       <div className={styles.detailsGrid}>
-        <ApiDetailsCard apiStats={apiStats} loading={loading} hasPrices={hasPrices} />
-        <ModelStatsCard modelStats={modelStats} loading={loading} hasPrices={hasPrices} />
+        <ApiDetailsCard apiStats={apiStats} loading={loading} hasPrices={hasPrices} currencySymbol={resolvedSelectedCurrency} />
+        <ModelStatsCard modelStats={modelStats} loading={loading} hasPrices={hasPrices} currencySymbol={resolvedSelectedCurrency} />
       </div>
 
       <RequestEventsDetailsCard
@@ -439,24 +437,7 @@ export function UsagePage() {
       />
 
       {/* Price Settings */}
-      {costMode === 'model' ? (
-        <PriceSettingsCard
-          modelNames={modelNames}
-          modelPrices={modelPrices}
-          onPricesChange={setModelPrices}
-        />
-      ) : (
-        <Card
-          title={t('usage_stats.endpoint_pricing_title')}
-          extra={
-            <Button variant="secondary" size="sm" onClick={() => navigate('/billing')}>
-              {t('usage_stats.go_to_billing')}
-            </Button>
-          }
-        >
-          <div className={styles.hint}>{t('usage_stats.endpoint_pricing_hint')}</div>
-        </Card>
-      )}
+      <PriceSettingsCard onGoToModelPricing={() => navigate('/billing/models')} />
     </div>
   );
 }

@@ -1,19 +1,22 @@
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
-import { formatCompactNumber, formatUsd, type ApiStats } from '@/utils/usage';
+import { formatCompactNumber, type ApiStats } from '@/utils/usage';
+import type { CurrencySymbol } from '@/features/billing/modelPricing/types';
+import { formatMoney } from '@/features/billing/modelPricing/money';
 import styles from '@/pages/UsagePage.module.scss';
 
 export interface ApiDetailsCardProps {
   apiStats: ApiStats[];
   loading: boolean;
   hasPrices: boolean;
+  currencySymbol: CurrencySymbol;
 }
 
 type ApiSortKey = 'endpoint' | 'requests' | 'tokens' | 'cost';
 type SortDir = 'asc' | 'desc';
 
-export function ApiDetailsCard({ apiStats, loading, hasPrices }: ApiDetailsCardProps) {
+export function ApiDetailsCard({ apiStats, loading, hasPrices, currencySymbol }: ApiDetailsCardProps) {
   const { t } = useTranslation();
   const [expandedApis, setExpandedApis] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<ApiSortKey>('requests');
@@ -123,7 +126,7 @@ export function ApiDetailsCard({ apiStats, loading, hasPrices }: ApiDetailsCardP
                           </span>
                           {hasPrices && (
                             <span className={styles.apiBadge}>
-                              {t('usage_stats.total_cost')}: {Number.isFinite(api.totalCost) ? formatUsd(api.totalCost) : '--'}
+                              {t('usage_stats.total_cost')}: {Number.isFinite(api.totalCost) ? formatMoney(currencySymbol, api.totalCost) : '--'}
                             </span>
                           )}
                         </div>

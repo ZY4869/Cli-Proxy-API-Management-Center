@@ -1,24 +1,24 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ScriptableContext } from 'chart.js';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Tooltip,
+  Legend,
+  Filler,
+} from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import type { ModelPricingAnalytics } from '@/features/billing/modelPricing/analyticsTypes';
-import type { CurrencySymbol } from '@/features/billing/modelPricing/types';
-import { formatMoney } from '@/features/billing/modelPricing/money';
 import { buildChartOptions, getHourChartMinWidth } from '@/utils/usage/chartConfig';
-import styles from '@/pages/UsagePage.module.scss';
+import type { ModelPricingAnalytics } from './modelPricing/analyticsTypes';
+import type { CurrencySymbol } from './modelPricing/types';
+import { formatMoney } from './modelPricing/money';
+import styles from './BillingPage.module.scss';
 
-export interface CostTrendChartProps {
-  loading: boolean;
-  isDark: boolean;
-  isMobile: boolean;
-  analytics: ModelPricingAnalytics;
-  selectedCurrency: CurrencySymbol;
-  hasPricingConfig: boolean;
-  timeRangeLabel: string;
-}
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler);
 
 const COST_COLOR = '#f59e0b';
 const COST_BG = 'rgba(245, 158, 11, 0.15)';
@@ -34,28 +34,35 @@ function buildGradient(ctx: ScriptableContext<'line'>) {
   return gradient;
 }
 
-export function CostTrendChart({
+export type ModelCostTrendCardProps = {
+  loading: boolean;
+  analytics: ModelPricingAnalytics;
+  selectedCurrency: CurrencySymbol;
+  isDark: boolean;
+  isMobile: boolean;
+  timeRangeLabel: string;
+};
+
+export function ModelCostTrendCard({
   loading,
-  isDark,
-  isMobile,
   analytics,
   selectedCurrency,
-  hasPricingConfig,
-  timeRangeLabel
-}: CostTrendChartProps) {
+  isDark,
+  isMobile,
+  timeRangeLabel,
+}: ModelCostTrendCardProps) {
   const { t } = useTranslation();
   const [period, setPeriod] = useState<'hour' | 'day'>('hour');
 
   const series = analytics.trendByCurrency[selectedCurrency]?.[period];
 
-  const { chartData, chartOptions, hasData, subtitle, missingRequestCount } = useMemo(() => {
+  const { chartData, chartOptions, hasData, subtitle } = useMemo(() => {
     if (!selectedCurrency || !series) {
       return {
         chartData: { labels: [], datasets: [] },
         chartOptions: {},
         hasData: false,
         subtitle: t('billing.select_currency'),
-        missingRequestCount: 0,
       };
     }
 
@@ -63,7 +70,7 @@ export function CostTrendChart({
       labels: series.labels,
       datasets: [
         {
-          label: t('usage_stats.total_cost'),
+          label: t('billing.total_cost'),
           data: series.data,
           borderColor: COST_COLOR,
           backgroundColor: buildGradient,
@@ -98,61 +105,53 @@ export function CostTrendChart({
       chartOptions: options,
       hasData: series.hasData,
       subtitle: `${timeRangeLabel} | ${selectedCurrency}${suffix}`,
-      missingRequestCount: missing,
     };
   }, [isDark, isMobile, period, selectedCurrency, series, t, timeRangeLabel]);
 
   return (
-    <Card
-      title={t('usage_stats.cost_trend')}
-      subtitle={subtitle}
-      extra={
-        <div className={styles.periodButtons}>
-          <Button
-            variant={period === 'hour' ? 'primary' : 'secondary'}
-            size="sm"
+    <div className={styles.chartCard}>
+      <div className={styles.chartHeader}>
+        <div>
+          <h3 className={styles.chartTitle}>{t('billing.cost_trend')}</h3>
+          <p className={styles.chartSubtitle}>{subtitle}</p>
+        </div>
+        <div className={styles.chartControls}>
+          <button
+            type="button"
+            className={`${styles.chartControlBtn} ${period === 'hour' ? styles.active : ''}`}
             onClick={() => setPeriod('hour')}
           >
             {t('usage_stats.by_hour')}
-          </Button>
-          <Button
-            variant={period === 'day' ? 'primary' : 'secondary'}
-            size="sm"
+          </button>
+          <button
+            type="button"
+            className={`${styles.chartControlBtn} ${period === 'day' ? styles.active : ''}`}
             onClick={() => setPeriod('day')}
           >
             {t('usage_stats.by_day')}
-          </Button>
+          </button>
         </div>
-      }
-    >
-      {loading ? (
-        <div className={styles.hint}>{t('common.loading')}</div>
-      ) : !hasPricingConfig ? (
-        <div className={styles.hint}>{t('usage_stats.cost_need_price')}</div>
-      ) : !selectedCurrency ? (
-        <div className={styles.hint}>{t('billing.select_currency')}</div>
-      ) : !hasData ? (
-        <div className={styles.hint}>
-          {missingRequestCount > 0 ? t('billing.model_pricing_missing_prices', { missingRequests: missingRequestCount }) : t('usage_stats.cost_no_data')}
-        </div>
-      ) : (
-        <div className={styles.chartWrapper}>
-          <div className={styles.chartArea}>
-            <div className={styles.chartScroller}>
-              <div
-                className={styles.chartCanvas}
-                style={
-                  period === 'hour'
-                    ? { minWidth: getHourChartMinWidth(chartData.labels.length, isMobile) }
-                    : undefined
-                }
-              >
-                <Line data={chartData} options={chartOptions} />
-              </div>
+      </div>
+
+      <div className={styles.chartContent}>
+        {loading ? (
+          <div className={styles.chartEmpty}>{t('common.loading')}</div>
+        ) : !selectedCurrency ? (
+          <div className={styles.chartEmpty}>{t('billing.select_currency')}</div>
+        ) : !hasData ? (
+          <div className={styles.chartEmpty}>{t('billing.no_cost_data')}</div>
+        ) : (
+          <div className={styles.chartScroller}>
+            <div
+              className={styles.chartCanvas}
+              style={period === 'hour' ? { minWidth: getHourChartMinWidth(chartData.labels.length, isMobile) } : undefined}
+            >
+              <Line data={chartData} options={chartOptions} />
             </div>
           </div>
-        </div>
-      )}
-    </Card>
+        )}
+      </div>
+    </div>
   );
 }
+

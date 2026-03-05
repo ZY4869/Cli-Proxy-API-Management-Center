@@ -4,6 +4,7 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 import path from 'path';
 import { execSync } from 'child_process';
 import fs from 'fs';
+import type { Plugin } from 'vite';
 
 // Get version from environment, git tag, or package.json
 function getVersion(): string {
@@ -46,10 +47,29 @@ function getVersion(): string {
   return 'dev';
 }
 
+function copyIndexToManagementHtml(): Plugin {
+  return {
+    name: 'copy-index-to-management-html',
+    apply: 'build',
+    closeBundle() {
+      try {
+        const distDir = path.resolve(__dirname, 'dist');
+        const indexPath = path.join(distDir, 'index.html');
+        const managementPath = path.join(distDir, 'management.html');
+        if (!fs.existsSync(indexPath)) return;
+        fs.copyFileSync(indexPath, managementPath);
+      } catch {
+        // ignore
+      }
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
+    copyIndexToManagementHtml(),
     viteSingleFile({
       removeViteModuleLoader: true
     })

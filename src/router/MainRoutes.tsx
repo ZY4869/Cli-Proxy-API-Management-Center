@@ -23,7 +23,6 @@ import { SystemPage } from '@/pages/SystemPage';
 import { MonitorPage } from '@/pages/MonitorPage';
 import { BackupPage } from '@/features/webdavBackup/BackupPage';
 import { BillingPage } from '@/features/billing/BillingPage';
-import { BillingEndpointEditPage } from '@/features/billing/BillingEndpointEditPage';
 import { BillingModelPricesPage } from '@/features/billing/BillingModelPricesPage';
 
 const mainRoutes = [
@@ -79,7 +78,7 @@ const mainRoutes = [
   { path: '/quota', element: <QuotaPage /> },
   { path: '/usage', element: <UsagePage /> },
   { path: '/billing', element: <BillingPage /> },
-  { path: '/billing/endpoint', element: <BillingEndpointEditPage /> },
+  { path: '/billing/endpoint', element: <Navigate to="/billing" replace /> },
   { path: '/billing/models', element: <BillingModelPricesPage /> },
   { path: '/config', element: <ConfigPage /> },
   { path: '/logs', element: <LogsPage /> },

@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
-import { formatCompactNumber, formatUsd } from '@/utils/usage';
+import { formatCompactNumber } from '@/utils/usage';
+import type { CurrencySymbol } from '@/features/billing/modelPricing/types';
+import { formatMoney } from '@/features/billing/modelPricing/money';
 import styles from '@/pages/UsagePage.module.scss';
 
 export interface ModelStat {
@@ -17,6 +19,7 @@ export interface ModelStatsCardProps {
   modelStats: ModelStat[];
   loading: boolean;
   hasPrices: boolean;
+  currencySymbol: CurrencySymbol;
 }
 
 type SortKey = 'model' | 'requests' | 'tokens' | 'cost' | 'successRate';
@@ -26,7 +29,7 @@ interface ModelStatWithRate extends ModelStat {
   successRate: number;
 }
 
-export function ModelStatsCard({ modelStats, loading, hasPrices }: ModelStatsCardProps) {
+export function ModelStatsCard({ modelStats, loading, hasPrices, currencySymbol }: ModelStatsCardProps) {
   const { t } = useTranslation();
   const [sortKey, setSortKey] = useState<SortKey>('requests');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -152,7 +155,7 @@ export function ModelStatsCard({ modelStats, loading, hasPrices }: ModelStatsCar
                         {stat.successRate.toFixed(1)}%
                       </span>
                     </td>
-                    {hasPrices && <td>{Number.isFinite(stat.cost) ? formatUsd(stat.cost) : '--'}</td>}
+                    {hasPrices && <td>{Number.isFinite(stat.cost) ? formatMoney(currencySymbol, stat.cost) : '--'}</td>}
                   </tr>
                 ))}
               </tbody>

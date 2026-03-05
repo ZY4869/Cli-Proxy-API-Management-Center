@@ -5,16 +5,12 @@ import { IconDiamond, IconDollarSign, IconSatellite, IconTimer, IconTrendingUp }
 import {
   formatCompactNumber,
   formatPerMinuteValue,
-  formatUsd,
-  calculateCost,
   collectUsageDetails,
-  collectUsageDetailsWithEndpoint,
   extractTotalTokens,
-  type ModelPrice
 } from '@/utils/usage';
-import type { CostMode } from '@/features/billing/types';
-import type { BillingCostConfig } from '@/features/billing/utils/costing';
-import { summarizeBillingCosts } from '@/features/billing/utils/costing';
+import type { CurrencyCostMap, ModelPricingAnalytics } from '@/features/billing/modelPricing/analyticsTypes';
+import type { CurrencySymbol } from '@/features/billing/modelPricing/types';
+import { formatMoney } from '@/features/billing/modelPricing/money';
 import { sparklineOptions } from '@/utils/usage/chartConfig';
 import type { UsagePayload } from './hooks/useUsageData';
 import type { SparklineBundle } from './hooks/useSparklines';
@@ -27,7 +23,7 @@ interface StatCardData {
   accent: string;
   accentSoft: string;
   accentBorder: string;
-  value: string;
+  value: ReactNode;
   meta?: ReactNode;
   trend: SparklineBundle | null;
 }
@@ -35,10 +31,9 @@ interface StatCardData {
 export interface StatCardsProps {
   usage: UsagePayload | null;
   loading: boolean;
-  modelPrices: Record<string, ModelPrice>;
-  costMode: CostMode;
-  billingConfig: BillingCostConfig;
-  hasEndpointPricing: boolean;
+  analytics: ModelPricingAnalytics;
+  hasPricingConfig: boolean;
+  selectedCurrency: CurrencySymbol;
   nowMs: number;
   sparklines: {
     requests: SparklineBundle | null;
@@ -49,18 +44,28 @@ export interface StatCardsProps {
   };
 }
 
-export function StatCards({ usage, loading, modelPrices, costMode, billingConfig, hasEndpointPricing, nowMs, sparklines }: StatCardsProps) {
+const renderMoneyList = (amounts: CurrencyCostMap, loading: boolean) => {
+  if (loading) return '--';
+  const entries = Object.entries(amounts ?? {})
+    .filter(([, v]) => Number.isFinite(v.totalCost) && v.totalCost !== 0)
+    .sort((a, b) => (b[1].totalCost ?? 0) - (a[1].totalCost ?? 0) || a[0].localeCompare(b[0]));
+  if (!entries.length) return '--';
+  return (
+    <div>
+      {entries.map(([symbol, totals]) => (
+        <div key={symbol}>{formatMoney(symbol, totals.totalCost)}</div>
+      ))}
+    </div>
+  );
+};
+
+export function StatCards({ usage, loading, analytics, hasPricingConfig, selectedCurrency, nowMs, sparklines }: StatCardsProps) {
   const { t } = useTranslation();
 
-  const hasModelPrices = Object.keys(modelPrices).length > 0;
-
-  const { tokenBreakdown, rateStats, totalCost, costAvailable, missingRequestCount } = useMemo(() => {
+  const { tokenBreakdown, rateStats } = useMemo(() => {
     const empty = {
       tokenBreakdown: { cachedTokens: 0, reasoningTokens: 0 },
       rateStats: { rpm: 0, tpm: 0, windowMinutes: 30, requestCount: 0, tokenCount: 0 },
-      totalCost: 0,
-      costAvailable: false,
-      missingRequestCount: 0
     };
 
     if (!usage) return empty;
@@ -69,9 +74,6 @@ export function StatCards({ usage, loading, modelPrices, costMode, billingConfig
 
     let cachedTokens = 0;
     let reasoningTokens = 0;
-    let totalCost = 0;
-    let costAvailable = false;
-    let missingRequestCount = 0;
 
     const now = nowMs;
     const windowMinutes = 30;
@@ -95,27 +97,7 @@ export function StatCards({ usage, loading, modelPrices, costMode, billingConfig
         requestCount += 1;
         tokenCount += extractTotalTokens(detail);
       }
-
-      if (costMode === 'model') {
-        if (hasModelPrices) {
-          costAvailable = true;
-          totalCost += calculateCost(detail, modelPrices);
-        }
-      }
     });
-
-    if (costMode === 'endpoint') {
-      if (hasEndpointPricing) {
-        const totalRequests = Number(usage?.total_requests) || 0;
-        const endpointDetails = collectUsageDetailsWithEndpoint(usage);
-        if (endpointDetails.length > 0 || totalRequests === 0) {
-          const summary = summarizeBillingCosts(endpointDetails, billingConfig);
-          costAvailable = true;
-          totalCost = summary.totalCost;
-          missingRequestCount = summary.missingRequestCount;
-        }
-      }
-    }
 
     const denominator = windowMinutes > 0 ? windowMinutes : 1;
     return {
@@ -127,11 +109,10 @@ export function StatCards({ usage, loading, modelPrices, costMode, billingConfig
         requestCount,
         tokenCount
       },
-      totalCost,
-      costAvailable,
-      missingRequestCount
     };
-  }, [billingConfig, costMode, hasEndpointPricing, hasModelPrices, modelPrices, nowMs, usage]);
+  }, [nowMs, usage]);
+
+  const selectedTotals = analytics.totalsByCurrency[selectedCurrency];
 
   const statsCards: StatCardData[] = [
     {
@@ -213,30 +194,43 @@ export function StatCards({ usage, loading, modelPrices, costMode, billingConfig
       accent: '#f59e0b',
       accentSoft: 'rgba(245, 158, 11, 0.18)',
       accentBorder: 'rgba(245, 158, 11, 0.32)',
-      value: loading ? '-' : costAvailable ? formatUsd(totalCost) : '--',
+      value: hasPricingConfig ? renderMoneyList(analytics.totalsByCurrency, loading) : '--',
       meta: (
         <>
           <span className={styles.statMetaItem}>
             {t('usage_stats.total_tokens')}: {loading ? '-' : formatCompactNumber(usage?.total_tokens ?? 0)}
           </span>
-          {!costAvailable && costMode === 'model' && (
+          {!hasPricingConfig && (
             <span className={`${styles.statMetaItem} ${styles.statSubtle}`}>
               {t('usage_stats.cost_need_price')}
             </span>
           )}
-          {!costAvailable && costMode === 'endpoint' && (
+          {hasPricingConfig && !selectedCurrency && (
             <span className={`${styles.statMetaItem} ${styles.statSubtle}`}>
-              {t('usage_stats.endpoint_cost_need_rule')}
+              {t('billing.select_currency')}
             </span>
           )}
-          {costAvailable && costMode === 'endpoint' && missingRequestCount > 0 && (
+          {selectedCurrency && selectedTotals ? (
+            <>
+              <span className={styles.statMetaItem}>
+                {t('billing.model_pricing_prompt_cost')}: {loading ? '--' : formatMoney(selectedCurrency, selectedTotals.promptCost)}
+              </span>
+              <span className={styles.statMetaItem}>
+                {t('billing.model_pricing_completion_cost')}: {loading ? '--' : formatMoney(selectedCurrency, selectedTotals.completionCost)}
+              </span>
+              <span className={styles.statMetaItem}>
+                {t('billing.model_pricing_cache_cost')}: {loading ? '--' : formatMoney(selectedCurrency, selectedTotals.cacheCost)}
+              </span>
+            </>
+          ) : null}
+          {analytics.missingCostRequestCount > 0 && (
             <span className={`${styles.statMetaItem} ${styles.statSubtle}`}>
-              {t('usage_stats.endpoint_cost_missing_rules', { missingRequests: missingRequestCount })}
+              {t('billing.model_pricing_missing_prices', { missingRequests: analytics.missingCostRequestCount })}
             </span>
           )}
         </>
       ),
-      trend: costAvailable ? sparklines.cost : null
+      trend: hasPricingConfig ? sparklines.cost : null
     }
   ];
 

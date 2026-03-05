@@ -7,33 +7,20 @@ import { useNotificationStore, useThemeStore, useUsageStatsStore, USAGE_STATS_ST
 import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { downloadBlob } from '@/utils/download';
-import {
-  collectUsageDetailsWithEndpoint,
-  filterUsageByTimeRange,
-  type UsageDetailWithEndpoint,
-  type UsageTimeRange,
-} from '@/utils/usage';
-import { useBillingStore } from './store/useBillingStore';
-import { DefaultRuleCard } from './DefaultRuleCard';
-import { CostTrendCard } from './CostTrendCard';
-import { CostBreakdownCard } from './CostBreakdownCard';
-import { TopEndpointsCard } from './TopEndpointsCard';
-import { TierDistributionCard } from './TierDistributionCard';
-import { CacheImpactCard } from './CacheImpactCard';
-import { BillingFiltersBar } from './BillingFiltersBar';
-import { BillingKpiCards } from './BillingKpiCards';
-import { BillingRulesQuickStartCard } from './BillingRulesQuickStartCard';
-import { EndpointListCard } from './EndpointListCard';
+import { collectUsageDetailsWithEndpoint, filterUsageByTimeRange, type UsageDetailWithEndpoint, type UsageTimeRange } from '@/utils/usage';
+import { buildModelPricingAnalytics } from './modelPricing/analytics';
+import { useModelPricingStore } from './modelPricing/useModelPricingStore';
+import type { CurrencySymbol } from './modelPricing/types';
+import { formatMoney } from './modelPricing/money';
+import { loadSelectedCurrency, resolveSelectedCurrency, saveSelectedCurrency } from './modelPricing/selectedCurrency';
+import { ModelBillingKpiCards } from './ModelBillingKpiCards';
+import { ModelCostTrendCard } from './ModelCostTrendCard';
 import { BillingModelPricesCard } from './BillingModelPricesCard';
-import {
-  buildBillingAnalytics,
-  matchesBillingEndpointFilters,
-  resolveBillingEndpointStatus,
-  type BillingDashboardFilters,
-  type BillingStatusFilter,
-  type EndpointAggregate,
-} from './utils/dashboard';
-import { normalizeEndpointKey } from './utils/normalizeEndpoint';
+import { TopBarChartCard } from './TopBarChartCard';
+import { ModelBillingFiltersBar } from './ModelBillingFiltersBar';
+import { ModelListCard } from './ModelListCard';
+import { EndpointAnalysisListCard } from './EndpointAnalysisListCard';
+import { ApiKeyBillingCard } from './ApiKeyBillingCard';
 import styles from './BillingPage.module.scss';
 
 const TIME_RANGE_STORAGE_KEY = 'cli-proxy-billing-time-range-v1';
@@ -77,30 +64,15 @@ export function BillingPage() {
     () => (lastRefreshedAtTs ? new Date(lastRefreshedAtTs) : null),
     [lastRefreshedAtTs]
   );
-
-  const defaultRule = useBillingStore((state) => state.defaultRule);
-  const setDefaultRule = useBillingStore((state) => state.setDefaultRule);
-  const endpointRules = useBillingStore((state) => state.endpointRules);
-  const exportJson = useBillingStore((state) => state.exportJson);
-  const importJsonMergeOverwrite = useBillingStore((state) => state.importJsonMergeOverwrite);
+  const pricingByModel = useModelPricingStore((s) => s.pricingByModel);
+  const exportPricing = useModelPricingStore((s) => s.exportJson);
+  const importPricing = useModelPricingStore((s) => s.importJsonMergeOverwrite);
 
   const [timeRange, setTimeRange] = useState<UsageTimeRange>(loadTimeRange);
-  const [endpointQuery, setEndpointQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<BillingStatusFilter>('all');
-  const [includeUnused, setIncludeUnused] = useState(true);
   const importInputRef = useRef<HTMLInputElement | null>(null);
-  const defaultRuleRef = useRef<HTMLDivElement | null>(null);
-  const endpointRulesRef = useRef<HTMLDivElement | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
-
-  const scrollToDefaultRule = useCallback(() => {
-    defaultRuleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, []);
-
-  const scrollToEndpointRules = useCallback(() => {
-    endpointRulesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, []);
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencySymbol>(() => loadSelectedCurrency());
 
   useEffect(() => {
     try {
@@ -124,21 +96,21 @@ export function BillingPage() {
   const handleExport = useCallback(() => {
     setExporting(true);
     try {
-      const payload = exportJson();
+      const payload = exportPricing();
       const safeTimestamp = new Date().toISOString();
-      const filename = `billing-rules-${safeTimestamp.replace(/[:.]/g, '-')}.json`;
+      const filename = `model-pricing-${safeTimestamp.replace(/[:.]/g, '-')}.json`;
       downloadBlob({
         filename,
         blob: new Blob([JSON.stringify(payload ?? {}, null, 2)], { type: 'application/json' }),
       });
-      showNotification(t('billing.export_success'), 'success');
+      showNotification(t('billing.model_pricing_export_success'), 'success');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '';
-      showNotification(`${t('billing.export_failed')}${message ? `: ${message}` : ''}`, 'error');
+      showNotification(`${t('billing.model_pricing_export_failed')}${message ? `: ${message}` : ''}`, 'error');
     } finally {
       setExporting(false);
     }
-  }, [exportJson, showNotification, t]);
+  }, [exportPricing, showNotification, t]);
 
   const handleImport = useCallback(() => {
     importInputRef.current?.click();
@@ -154,16 +126,16 @@ export function BillingPage() {
       try {
         const text = await file.text();
         const parsed = JSON.parse(text);
-        const result = importJsonMergeOverwrite(parsed);
-        showNotification(t('billing.import_success', { endpoints: result.importedEndpoints }), 'success');
+        const result = importPricing(parsed);
+        showNotification(t('billing.model_pricing_import_success', { models: result.importedModels }), 'success');
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : '';
-        showNotification(`${t('billing.import_failed')}${message ? `: ${message}` : ''}`, 'error');
+        showNotification(`${t('billing.model_pricing_import_failed')}${message ? `: ${message}` : ''}`, 'error');
       } finally {
         setImporting(false);
       }
     },
-    [importJsonMergeOverwrite, showNotification, t]
+    [importPricing, showNotification, t]
   );
 
   const filteredUsage = useMemo(
@@ -176,101 +148,47 @@ export function BillingPage() {
     return collectUsageDetailsWithEndpoint(filteredUsage);
   }, [filteredUsage]);
 
-  const billingConfig = useMemo(
-    () => ({ defaultRule, endpointRules }),
-    [defaultRule, endpointRules]
-  );
-
   const hourWindowHours =
     timeRange === '7h' ? 7 : timeRange === '24h' ? 24 : timeRange === '7d' ? 7 * 24 : undefined;
-
-  const filters = useMemo(
-    (): BillingDashboardFilters => ({
-      endpointQuery,
-      statusFilter,
-    }),
-    [endpointQuery, statusFilter]
-  );
-
   const analytics = useMemo(
-    () =>
-      buildBillingAnalytics(details, billingConfig, {
-        filters,
-        hourWindowHours,
-        now: lastRefreshedAt ?? undefined,
-      }),
-    [billingConfig, details, filters, hourWindowHours, lastRefreshedAt]
+    () => buildModelPricingAnalytics(details, pricingByModel, { hourWindowHours, now: lastRefreshedAt ?? undefined }),
+    [details, hourWindowHours, lastRefreshedAt, pricingByModel]
   );
 
   const timeRangeLabel = useMemo(() => t(TIME_RANGE_LABEL_KEY[timeRange]), [t, timeRange]);
+  const resolvedSelectedCurrency = useMemo(
+    () => resolveSelectedCurrency(analytics.currenciesInUse, selectedCurrency),
+    [analytics.currenciesInUse, selectedCurrency]
+  );
 
-  const endpointRows = useMemo((): EndpointAggregate[] => {
-    const rowsByKey = new Map<string, EndpointAggregate>();
-    analytics.endpoints.forEach((endpoint) => {
-      rowsByKey.set(endpoint.endpointKey, endpoint);
-    });
-
-    if (includeUnused) {
-      const emptyCosts: EndpointAggregate['costs'] = {
-        inputCost: 0,
-        outputCost: 0,
-        cacheReadCost: 0,
-        cacheStorageCost: 0,
-        totalCost: 0,
-      };
-      const emptyCacheImpact: EndpointAggregate['cacheImpact'] = {
-        inputTokens: 0,
-        cachedTokens: 0,
-        cacheHitRatio: 0,
-        cacheReadCost: 0,
-        cacheStorageCost: 0,
-        baselineInputCostNoCache: 0,
-        actualCacheRelatedCost: 0,
-        netSavings: 0,
-      };
-
-      Object.keys(endpointRules).forEach((endpointKey) => {
-        const normalized = normalizeEndpointKey(endpointKey);
-        if (!normalized || rowsByKey.has(normalized)) return;
-        const status = resolveBillingEndpointStatus(normalized, billingConfig);
-        if (!matchesBillingEndpointFilters(normalized, status, filters)) return;
-        rowsByKey.set(normalized, {
-          endpointKey: normalized,
-          status,
-          requests: 0,
-          successCount: 0,
-          failureCount: 0,
-          knownCostRequests: 0,
-          missingCostRequests: 0,
-          promptTokens: 0,
-          cachedTokens: 0,
-          outputBillableTokens: 0,
-          costs: emptyCosts,
-          costKnown: false,
-          cacheHitRatio: 0,
-          cacheImpact: emptyCacheImpact,
-          tierHits: [],
-          lastSeenMs: 0,
-        });
-      });
+  useEffect(() => {
+    if (resolvedSelectedCurrency !== selectedCurrency) {
+      setSelectedCurrency(resolvedSelectedCurrency);
     }
+    saveSelectedCurrency(resolvedSelectedCurrency);
+  }, [resolvedSelectedCurrency, selectedCurrency]);
 
-    const rows = Array.from(rowsByKey.values());
-    rows.sort((a, b) => {
-      if (a.costKnown && b.costKnown) return b.costs.totalCost - a.costs.totalCost;
-      if (a.costKnown && !b.costKnown) return -1;
-      if (!a.costKnown && b.costKnown) return 1;
-      return b.requests - a.requests;
-    });
-    return rows;
-  }, [analytics.endpoints, billingConfig, endpointRules, filters, includeUnused]);
+  const modelTopItems = useMemo(
+    () =>
+      analytics.models.map((m) => ({
+        label: m.modelName,
+        cost: Number(m.costs?.[resolvedSelectedCurrency]?.totalCost) || 0,
+        requests: m.requests,
+        tokens: m.inputTokens + m.outputBillableTokens,
+      })),
+    [analytics.models, resolvedSelectedCurrency]
+  );
 
-  const handleEnableDefaultRule = useCallback(() => {
-    if (defaultRule.enabled) return;
-    setDefaultRule({ ...defaultRule, enabled: true });
-    showNotification(t('billing.default_rule_enabled_toast'), 'success');
-    scrollToDefaultRule();
-  }, [defaultRule, scrollToDefaultRule, setDefaultRule, showNotification, t]);
+  const endpointTopItems = useMemo(
+    () =>
+      analytics.endpoints.map((e) => ({
+        label: e.endpointKey,
+        cost: Number(e.costs?.[resolvedSelectedCurrency]?.totalCost) || 0,
+        requests: e.requests,
+        tokens: e.inputTokens + e.outputBillableTokens,
+      })),
+    [analytics.endpoints, resolvedSelectedCurrency]
+  );
 
   return (
     <div className={styles.container}>
@@ -286,15 +204,9 @@ export function BillingPage() {
       <div className={styles.header}>
         <div className={styles.titleGroup}>
           <h1 className={styles.pageTitle}>{t('billing.title')}</h1>
-          <p className={styles.pageSubtitle}>{t('billing.subtitle')}</p>
+          <p className={styles.pageSubtitle}>{t('billing.model_pricing_subtitle')}</p>
         </div>
         <div className={styles.headerActions}>
-          <Button variant="secondary" size="sm" onClick={scrollToDefaultRule} disabled={loading}>
-            {t('billing.default_rule')}
-          </Button>
-          <Button variant="secondary" size="sm" onClick={scrollToEndpointRules} disabled={loading}>
-            {t('billing.endpoint_rules')}
-          </Button>
           <Button variant="secondary" size="sm" onClick={() => navigate('/billing/models')} disabled={loading}>
             {t('billing.model_prices')}
           </Button>
@@ -305,7 +217,7 @@ export function BillingPage() {
             loading={exporting}
             disabled={loading || importing}
           >
-            {t('billing.export')}
+            {t('billing.model_pricing_export')}
           </Button>
           <Button
             variant="secondary"
@@ -314,7 +226,7 @@ export function BillingPage() {
             loading={importing}
             disabled={loading || exporting}
           >
-            {t('billing.import')}
+            {t('billing.model_pricing_import')}
           </Button>
           <Button
             variant="secondary"
@@ -341,82 +253,71 @@ export function BillingPage() {
 
       {error && <div className={styles.errorBox}>{String(error)}</div>}
 
-      <BillingFiltersBar
+      <ModelBillingFiltersBar
         timeRange={timeRange}
         onTimeRangeChange={setTimeRange}
-        endpointQuery={endpointQuery}
-        onEndpointQueryChange={setEndpointQuery}
-        statusFilter={statusFilter}
-        onStatusFilterChange={setStatusFilter}
-        includeUnused={includeUnused}
-        onIncludeUnusedChange={setIncludeUnused}
+        currenciesInUse={analytics.currenciesInUse}
+        selectedCurrency={resolvedSelectedCurrency}
+        onSelectedCurrencyChange={setSelectedCurrency}
         disabled={loading && !usage}
       />
 
-      {!analytics.hasAnyEnabledRule && (
-        <BillingRulesQuickStartCard
-          onEditDefaultRule={() => navigate(`/billing/endpoint?key=${encodeURIComponent('__default__')}`)}
-          onEnableDefaultRule={handleEnableDefaultRule}
-          onScrollToDefaultRule={scrollToDefaultRule}
-          onScrollToEndpointRules={scrollToEndpointRules}
-        />
-      )}
-
-      <BillingKpiCards
+      <ModelBillingKpiCards
         loading={loading && !usage}
         timeRangeLabel={timeRangeLabel}
         analytics={analytics}
-        onShowMissing={() => setStatusFilter('missing')}
+        selectedCurrency={resolvedSelectedCurrency}
       />
 
       <div className={styles.dashboardChartsGrid}>
-        <CostTrendCard
+        <ModelCostTrendCard
           loading={loading && !usage}
           analytics={analytics}
           isDark={isDark}
           isMobile={isMobile}
           timeRangeLabel={timeRangeLabel}
+          selectedCurrency={resolvedSelectedCurrency}
         />
-        <CostBreakdownCard
+        <TopBarChartCard
           loading={loading && !usage}
-          analytics={analytics}
+          items={modelTopItems}
           isDark={isDark}
-          timeRangeLabel={timeRangeLabel}
-        />
-        <TopEndpointsCard
-          loading={loading && !usage}
-          analytics={analytics}
-          isDark={isDark}
-          timeRangeLabel={timeRangeLabel}
-        />
-        <TierDistributionCard
-          loading={loading && !usage}
-          analytics={analytics}
-          isDark={isDark}
-          timeRangeLabel={timeRangeLabel}
+          title={t('billing.top_models_title')}
+          subtitle={`${timeRangeLabel} | ${resolvedSelectedCurrency || t('billing.select_currency')}`}
+          costLabel={t('billing.cost')}
+          requestsLabel={t('billing.requests')}
+          tokensLabel={t('billing.tokens')}
+          costFormatter={(v) => formatMoney(resolvedSelectedCurrency, v)}
+          emptyText={t('billing.no_cost_data')}
         />
       </div>
 
-	      <div className={styles.statsGrid}>
-	        <CacheImpactCard loading={loading && !usage} analytics={analytics} timeRangeLabel={timeRangeLabel} />
-	        <div ref={defaultRuleRef}>
-	          <DefaultRuleCard
-	            rule={defaultRule}
-	            onRuleChange={setDefaultRule}
-	            onEdit={() => navigate(`/billing/endpoint?key=${encodeURIComponent('__default__')}`)}
-	          />
-	        </div>
-	      </div>
-
       <BillingModelPricesCard />
 
-	      <div ref={endpointRulesRef}>
-	        <EndpointListCard
-	          loading={loading && !usage}
-	          rows={endpointRows}
-	          onEditEndpoint={(endpoint) => navigate(`/billing/endpoint?key=${encodeURIComponent(endpoint)}`)}
-	        />
-	      </div>
-	    </div>
-	  );
+      <div className={styles.dashboardChartsGrid}>
+        <TopBarChartCard
+          loading={loading && !usage}
+          items={endpointTopItems}
+          isDark={isDark}
+          title={t('billing.top_endpoints_title')}
+          subtitle={`${timeRangeLabel} | ${resolvedSelectedCurrency || t('billing.select_currency')}`}
+          costLabel={t('billing.cost')}
+          requestsLabel={t('billing.requests')}
+          tokensLabel={t('billing.tokens')}
+          costFormatter={(v) => formatMoney(resolvedSelectedCurrency, v)}
+          emptyText={t('billing.no_endpoints')}
+        />
+        <ApiKeyBillingCard loading={loading && !usage} keys={analytics.keys} selectedCurrency={resolvedSelectedCurrency} />
+      </div>
+
+      <div className={styles.detailsGrid}>
+        <ModelListCard loading={loading && !usage} models={analytics.models} selectedCurrency={resolvedSelectedCurrency} />
+        <EndpointAnalysisListCard
+          loading={loading && !usage}
+          endpoints={analytics.endpoints}
+          selectedCurrency={resolvedSelectedCurrency}
+        />
+      </div>
+    </div>
+  );
 }

@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { USAGE_STATS_STALE_TIME_MS, useNotificationStore, useUsageStatsStore } from '@/stores';
 import { usageApi } from '@/services/api/usage';
 import { downloadBlob } from '@/utils/download';
-import { loadModelPrices, saveModelPrices, type ModelPrice } from '@/utils/usage';
 
 export interface UsagePayload {
   total_requests?: number;
@@ -19,8 +18,6 @@ export interface UseUsageDataReturn {
   loading: boolean;
   error: string;
   lastRefreshedAt: Date | null;
-  modelPrices: Record<string, ModelPrice>;
-  setModelPrices: (prices: Record<string, ModelPrice>) => void;
   loadUsage: () => Promise<void>;
   handleExport: () => Promise<void>;
   handleImport: () => void;
@@ -39,7 +36,6 @@ export function useUsageData(): UseUsageDataReturn {
   const lastRefreshedAtTs = useUsageStatsStore((state) => state.lastRefreshedAt);
   const loadUsageStats = useUsageStatsStore((state) => state.loadUsageStats);
 
-  const [modelPrices, setModelPrices] = useState<Record<string, ModelPrice>>({});
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -50,7 +46,6 @@ export function useUsageData(): UseUsageDataReturn {
 
   useEffect(() => {
     void loadUsageStats({ staleTimeMs: USAGE_STATS_STALE_TIME_MS }).catch(() => {});
-    setModelPrices(loadModelPrices());
   }, [loadUsageStats]);
 
   const handleExport = async () => {
@@ -129,11 +124,6 @@ export function useUsageData(): UseUsageDataReturn {
     }
   };
 
-  const handleSetModelPrices = useCallback((prices: Record<string, ModelPrice>) => {
-    setModelPrices(prices);
-    saveModelPrices(prices);
-  }, []);
-
   const usage = usageSnapshot as UsagePayload | null;
   const error = storeError || '';
   const lastRefreshedAt = lastRefreshedAtTs ? new Date(lastRefreshedAtTs) : null;
@@ -143,8 +133,6 @@ export function useUsageData(): UseUsageDataReturn {
     loading,
     error,
     lastRefreshedAt,
-    modelPrices,
-    setModelPrices: handleSetModelPrices,
     loadUsage,
     handleExport,
     handleImport,

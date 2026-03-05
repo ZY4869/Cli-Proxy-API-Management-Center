@@ -1,44 +1,43 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SecondaryScreenShell } from '@/components/common/SecondaryScreenShell';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
-import { Modal } from '@/components/ui/Modal';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
-import { apiKeysApi } from '@/services/api';
-import { useAuthStore, useConfigStore, useModelsStore, useNotificationStore } from '@/stores';
-import { getModelNamesFromUsage, loadModelPrices, saveModelPrices, type ModelPrice } from '@/utils/usage';
-import type { ModelInfo } from '@/utils/models';
-import { useUsageStatsStore } from '@/stores/useUsageStatsStore';
+import { useNotificationStore } from '@/stores';
+import type { ModelPricingV1 } from './modelPricing/types';
+import { useModelPricingStore } from './modelPricing/useModelPricingStore';
+import { useModelPriceModels } from './modelPrices/useModelPriceModels';
+import { ModelPricingEditModal } from './ModelPricingEditModal';
 import styles from './BillingModelPricesPage.module.scss';
-
-const normalizeApiKeyList = (input: unknown): string[] => {
-  if (!Array.isArray(input)) return [];
-  const seen = new Set<string>();
-  const keys: string[] = [];
-
-  input.forEach((item) => {
-    const record =
-      item !== null && typeof item === 'object' && !Array.isArray(item) ? (item as Record<string, unknown>) : null;
-    const value =
-      typeof item === 'string' ? item : record ? (record['api-key'] ?? record['apiKey'] ?? record.key ?? record.Key) : '';
-    const trimmed = String(value ?? '').trim();
-    if (!trimmed || seen.has(trimmed)) return;
-    seen.add(trimmed);
-    keys.push(trimmed);
-  });
-
-  return keys;
-};
 
 type ModelRow = {
   name: string;
   alias?: string;
   description?: string;
-  price: ModelPrice | null;
+  pricing: ModelPricingV1 | null;
   configured: boolean;
+};
+
+const toNonNegative = (value: unknown): number => {
+  const num = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(num)) return 0;
+  return Math.max(num, 0);
+};
+
+const formatPricingSummary = (pricing: ModelPricingV1 | null): string => {
+  if (!pricing) return '--';
+  const symbol = String(pricing.currencySymbol ?? '').trim() || '$';
+  const tiers = Array.isArray(pricing.tiers) ? pricing.tiers : [];
+  const cache = pricing.cachePer1M;
+  const cacheLabel = cache === undefined ? 'cache:follow' : `cache:${toNonNegative(cache).toFixed(4)}`;
+  if (tiers.length === 1 && tiers[0]?.maxPromptTokens === null) {
+    const t0 = tiers[0];
+    return `${symbol} flat in:${toNonNegative(t0.promptPer1M).toFixed(4)} out:${toNonNegative(t0.completionPer1M).toFixed(4)} ${cacheLabel}`;
+  }
+  return `${symbol} tiers:${tiers.length} ${cacheLabel}`;
 };
 
 export function BillingModelPricesPage() {
@@ -46,107 +45,28 @@ export function BillingModelPricesPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const showNotification = useNotificationStore((state) => state.showNotification);
-
-  const apiBase = useAuthStore((state) => state.apiBase);
-  const connectionStatus = useAuthStore((state) => state.connectionStatus);
-  const config = useConfigStore((state) => state.config);
-
-  const models = useModelsStore((state) => state.models);
-  const modelsLoading = useModelsStore((state) => state.loading);
-  const modelsError = useModelsStore((state) => state.error);
-  const fetchModels = useModelsStore((state) => state.fetchModels);
-
-  const usage = useUsageStatsStore((state) => state.usage);
+  const { models, source, loading: modelsLoading, error: modelsError, refresh } = useModelPriceModels();
+  const pricingByModel = useModelPricingStore((s) => s.pricingByModel);
+  const setPricingForModel = useModelPricingStore((s) => s.setPricingForModel);
+  const removePricingForModel = useModelPricingStore((s) => s.removePricingForModel);
 
   const [query, setQuery] = useState('');
   const [onlyMissing, setOnlyMissing] = useState(false);
-  const [modelPrices, setModelPrices] = useState<Record<string, ModelPrice>>(() => loadModelPrices());
-
   const [editModel, setEditModel] = useState<string | null>(null);
-  const [editPrompt, setEditPrompt] = useState('');
-  const [editCompletion, setEditCompletion] = useState('');
-  const [editCache, setEditCache] = useState('');
-
-  const apiKeysCacheRef = useRef<string[]>([]);
-
-  const persistPrices = useCallback((next: Record<string, ModelPrice>) => {
-    setModelPrices(next);
-    saveModelPrices(next);
-  }, []);
-
-  const resolveApiKeysForModels = useCallback(async () => {
-    if (apiKeysCacheRef.current.length) {
-      return apiKeysCacheRef.current;
-    }
-
-    const configKeys = normalizeApiKeyList(config?.apiKeys);
-    if (configKeys.length) {
-      apiKeysCacheRef.current = configKeys;
-      return configKeys;
-    }
-
-    try {
-      const list = await apiKeysApi.list();
-      const normalized = normalizeApiKeyList(list);
-      if (normalized.length) {
-        apiKeysCacheRef.current = normalized;
-      }
-      return normalized;
-    } catch {
-      return [];
-    }
-  }, [config?.apiKeys]);
-
-  const loadModels = useCallback(
-    async (forceRefresh: boolean) => {
-      if (connectionStatus !== 'connected' || !apiBase) {
-        showNotification(t('notification.connection_required'), 'warning');
-        return;
-      }
-
-      if (forceRefresh) {
-        apiKeysCacheRef.current = [];
-      }
-
-      try {
-        const apiKeys = await resolveApiKeysForModels();
-        const primaryKey = apiKeys[0];
-        await fetchModels(apiBase, primaryKey, forceRefresh);
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
-        showNotification(`${t('system_info.models_error')}${message ? `: ${message}` : ''}`, 'error');
-      }
-    },
-    [apiBase, connectionStatus, fetchModels, resolveApiKeysForModels, showNotification, t]
-  );
-
-  useEffect(() => {
-    void loadModels(false);
-  }, [loadModels]);
-
-  const usageFallbackModels = useMemo((): ModelInfo[] => {
-    const names = getModelNamesFromUsage(usage);
-    return names.map((name) => ({ name }));
-  }, [usage]);
-
-  const resolvedModels = useMemo(() => {
-    if (models.length > 0) return models;
-    return usageFallbackModels;
-  }, [models, usageFallbackModels]);
 
   const rows = useMemo((): ModelRow[] => {
     const q = query.trim().toLowerCase();
-    const list = resolvedModels
+    const list = models
       .map((model) => {
         const name = String(model.name ?? '').trim();
         if (!name) return null;
-        const price = modelPrices[name] ?? null;
+        const pricing = pricingByModel[name] ?? null;
         return {
           name,
           alias: model.alias,
           description: model.description,
-          price,
-          configured: Boolean(price),
+          pricing,
+          configured: Boolean(pricing),
         } satisfies ModelRow;
       })
       .filter(Boolean) as ModelRow[];
@@ -162,27 +82,23 @@ export function BillingModelPricesPage() {
 
     filtered.sort((a, b) => a.name.localeCompare(b.name));
     return filtered;
-  }, [modelPrices, onlyMissing, query, resolvedModels]);
+  }, [models, onlyMissing, pricingByModel, query]);
 
   const configuredCount = useMemo(() => rows.filter((row) => row.configured).length, [rows]);
   const missingCount = useMemo(() => rows.length - configuredCount, [rows, configuredCount]);
 
   const orphanPriceModels = useMemo(() => {
-    const availableSet = new Set(resolvedModels.map((m) => String(m.name ?? '').trim()).filter(Boolean));
-    return Object.keys(modelPrices)
+    const availableSet = new Set(models.map((m) => String(m.name ?? '').trim()).filter(Boolean));
+    return Object.keys(pricingByModel)
       .filter((modelName) => modelName && !availableSet.has(modelName))
       .sort((a, b) => a.localeCompare(b));
-  }, [modelPrices, resolvedModels]);
+  }, [models, pricingByModel]);
 
   const openEdit = useCallback(
     (modelName: string) => {
-      const price = modelPrices[modelName];
       setEditModel(modelName);
-      setEditPrompt(price?.prompt?.toString() ?? '');
-      setEditCompletion(price?.completion?.toString() ?? '');
-      setEditCache(price?.cache?.toString() ?? '');
     },
-    [modelPrices]
+    []
   );
 
   const clearModelSearchParam = useCallback(() => {
@@ -199,35 +115,12 @@ export function BillingModelPricesPage() {
     openEdit(fromQuery);
   }, [editModel, openEdit, searchParams]);
 
-  const handleSaveEdit = useCallback(() => {
-    if (!editModel) return;
-    const prompt = Number.parseFloat(editPrompt) || 0;
-    const completion = Number.parseFloat(editCompletion) || 0;
-    const cache = editCache.trim() === '' ? prompt : Number.parseFloat(editCache) || 0;
-    const next = { ...modelPrices, [editModel]: { prompt, completion, cache } };
-    persistPrices(next);
-    setEditModel(null);
-    clearModelSearchParam();
-    showNotification(t('billing.model_prices_saved'), 'success');
-  }, [clearModelSearchParam, editCache, editCompletion, editModel, editPrompt, modelPrices, persistPrices, showNotification, t]);
-
-  const handleDeletePrice = useCallback(
-    (modelName: string) => {
-      const next = { ...modelPrices };
-      delete next[modelName];
-      persistPrices(next);
-      showNotification(t('billing.model_prices_deleted'), 'success');
-    },
-    [modelPrices, persistPrices, showNotification, t]
-  );
-
   const subtitle = useMemo(() => {
-    const hasModels = resolvedModels.length > 0;
-    const sourceLabel =
-      models.length > 0 ? t('billing.model_prices_source_models') : t('billing.model_prices_source_usage');
+    const hasModels = models.length > 0;
+    const sourceLabel = source === 'models' ? t('billing.model_prices_source_models') : t('billing.model_prices_source_usage');
     if (!hasModels) return t('billing.model_prices_empty_models');
     return sourceLabel;
-  }, [models.length, resolvedModels.length, t]);
+  }, [models.length, source, t]);
 
   return (
     <SecondaryScreenShell
@@ -235,7 +128,7 @@ export function BillingModelPricesPage() {
       onBack={() => navigate('/billing')}
       backLabel={t('common.back')}
       rightAction={
-        <Button variant="secondary" size="sm" onClick={() => void loadModels(true)} loading={modelsLoading}>
+        <Button variant="secondary" size="sm" onClick={() => void refresh(true)} loading={modelsLoading}>
           {t('common.refresh')}
         </Button>
       }
@@ -283,30 +176,28 @@ export function BillingModelPricesPage() {
         ) : rows.length === 0 ? (
           <div className="hint">{t('billing.model_prices_empty_models')}</div>
         ) : (
-          <div className={styles.modelsList}>
-            <div className={styles.modelHeader} aria-hidden="true">
-              <div>{t('usage_stats.model_name')}</div>
-              <div>{t('usage_stats.model_price_settings')}</div>
-              <div>{t('billing.filter_status')}</div>
-              <div />
-            </div>
-            {rows.map((row) => (
-              <div key={row.name} className={styles.modelRow}>
-                <div className={styles.modelName}>
-                  <div className={styles.modelNameMain} title={row.name}>
-                    {row.name}
-                  </div>
-                  {row.alias ? (
-                    <div className={styles.modelNameSub} title={row.alias}>
-                      {row.alias}
+            <div className={styles.modelsList}>
+              <div className={styles.modelHeader} aria-hidden="true">
+                <div>{t('usage_stats.model_name')}</div>
+                <div>{t('usage_stats.model_price_settings')}</div>
+                <div>{t('billing.filter_status')}</div>
+                <div />
+              </div>
+              {rows.map((row) => (
+                <div key={row.name} className={styles.modelRow}>
+                  <div className={styles.modelName}>
+                    <div className={styles.modelNameMain} title={row.name}>
+                      {row.name}
                     </div>
-                  ) : null}
-                </div>
-                <div className={styles.priceSummary}>
-                  {row.price
-                    ? `in:${row.price.prompt.toFixed(4)} out:${row.price.completion.toFixed(4)} cache:${row.price.cache.toFixed(4)}`
-                    : '--'}
-                </div>
+                    {row.alias ? (
+                      <div className={styles.modelNameSub} title={row.alias}>
+                        {row.alias}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className={styles.priceSummary}>
+                    {formatPricingSummary(row.pricing)}
+                  </div>
                 <span
                   className={`${styles.statusBadge} ${row.configured ? styles.statusConfigured : styles.statusMissing}`}
                 >
@@ -316,16 +207,11 @@ export function BillingModelPricesPage() {
                   <Button variant="secondary" size="sm" onClick={() => openEdit(row.name)}>
                     {t('common.edit')}
                   </Button>
-                  {row.configured ? (
-                    <Button variant="danger" size="sm" onClick={() => handleDeletePrice(row.name)}>
-                      {t('common.delete')}
-                    </Button>
-                  ) : null}
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+                </div>
+              ))}
+            </div>
+          )}
       </Card>
 
       {orphanPriceModels.length > 0 ? (
@@ -338,7 +224,7 @@ export function BillingModelPricesPage() {
               <div />
             </div>
             {orphanPriceModels.map((modelName) => {
-              const price = modelPrices[modelName];
+              const pricing = pricingByModel[modelName] ?? null;
               return (
                 <div key={modelName} className={styles.modelRow}>
                   <div className={styles.modelName}>
@@ -348,9 +234,7 @@ export function BillingModelPricesPage() {
                     <div className={styles.modelNameSub}>{t('billing.model_prices_orphan_tag')}</div>
                   </div>
                   <div className={styles.priceSummary}>
-                    {price
-                      ? `in:${price.prompt.toFixed(4)} out:${price.completion.toFixed(4)} cache:${price.cache.toFixed(4)}`
-                      : '--'}
+                    {formatPricingSummary(pricing)}
                   </div>
                   <span className={`${styles.statusBadge} ${styles.statusConfigured}`}>
                     {t('billing.model_prices_configured')}
@@ -358,9 +242,6 @@ export function BillingModelPricesPage() {
                   <div className={styles.rowActions}>
                     <Button variant="secondary" size="sm" onClick={() => openEdit(modelName)}>
                       {t('common.edit')}
-                    </Button>
-                    <Button variant="danger" size="sm" onClick={() => handleDeletePrice(modelName)}>
-                      {t('common.delete')}
                     </Button>
                   </div>
                 </div>
@@ -370,59 +251,29 @@ export function BillingModelPricesPage() {
         </Card>
       ) : null}
 
-      <Modal
+      <ModelPricingEditModal
         open={editModel !== null}
-        title={editModel ?? ''}
+        modelName={editModel ?? ''}
+        initialPricing={editModel ? pricingByModel[editModel] ?? null : null}
         onClose={() => {
           setEditModel(null);
           clearModelSearchParam();
         }}
-        width={520}
-        footer={
-          <div className={styles.rowActions}>
-            <Button variant="secondary" onClick={() => setEditModel(null)}>
-              {t('common.cancel')}
-            </Button>
-            <Button variant="primary" onClick={handleSaveEdit} disabled={!editModel}>
-              {t('common.save')}
-            </Button>
-          </div>
-        }
-      >
-        <div className={styles.editModalBody}>
-          <div className={styles.formField}>
-            <label>{t('usage_stats.model_price_prompt')} ($/1M)</label>
-            <Input
-              type="number"
-              value={editPrompt}
-              onChange={(e) => setEditPrompt(e.target.value)}
-              placeholder="0.00"
-              step="0.0001"
-            />
-          </div>
-          <div className={styles.formField}>
-            <label>{t('usage_stats.model_price_completion')} ($/1M)</label>
-            <Input
-              type="number"
-              value={editCompletion}
-              onChange={(e) => setEditCompletion(e.target.value)}
-              placeholder="0.00"
-              step="0.0001"
-            />
-          </div>
-          <div className={styles.formField}>
-            <label>{t('usage_stats.model_price_cache')} ($/1M)</label>
-            <Input
-              type="number"
-              value={editCache}
-              onChange={(e) => setEditCache(e.target.value)}
-              placeholder={t('billing.model_prices_cache_placeholder')}
-              step="0.0001"
-            />
-            <div className={styles.mutedHint}>{t('billing.model_prices_cache_hint')}</div>
-          </div>
-        </div>
-      </Modal>
+        onDelete={() => {
+          if (!editModel) return;
+          removePricingForModel(editModel);
+          setEditModel(null);
+          clearModelSearchParam();
+          showNotification(t('billing.model_prices_deleted'), 'success');
+        }}
+        onSave={(pricing) => {
+          if (!editModel) return;
+          setPricingForModel(editModel, pricing);
+          setEditModel(null);
+          clearModelSearchParam();
+          showNotification(t('billing.model_prices_saved'), 'success');
+        }}
+      />
     </SecondaryScreenShell>
   );
 }
