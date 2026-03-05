@@ -269,6 +269,12 @@
   gap: 8px;
 }
 
+.kpiTitleActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .kpiLabel {
   font-size: 12px;
   color: var(--text-tertiary);
@@ -305,6 +311,17 @@
   }
 }
 
+.moneyList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.moneyItem {
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
 .kpiMeta {
   font-size: 12px;
   color: var(--text-secondary);
@@ -320,6 +337,111 @@
 
 .kpiSubtle {
   color: var(--text-tertiary);
+}
+
+.kpiMiniGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+.kpiMiniCard {
+  border: 1px solid var(--border-color);
+  border-radius: $radius-lg;
+  background: var(--bg-secondary);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 58px;
+
+  @include mobile {
+    border-radius: $radius-md;
+    min-height: 52px;
+  }
+}
+
+.kpiMiniLabel {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.kpiMiniValue {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.kpiSplitGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.kpiSplitCard {
+  border: 1px solid var(--border-color);
+  border-radius: $radius-lg;
+  background: var(--bg-secondary);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 78px;
+
+  @include mobile {
+    border-radius: $radius-md;
+    min-height: 70px;
+  }
+}
+
+.kpiSplitPositive {
+  border-color: rgba($success-color, 0.28);
+  background: rgba($success-color, 0.12);
+}
+
+.kpiSplitLabel {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-weight: 800;
+}
+
+.kpiSplitValue,
+.kpiSplitValueMuted {
+  font-size: 22px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+
+  @include mobile {
+    font-size: 20px;
+  }
+}
+
+.kpiSplitValue {
+  color: var(--text-primary);
+}
+
+.kpiSplitValueMuted {
+  color: var(--text-secondary);
+}
+
+.kpiDefaultCurrencyBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .kpiActionButton {
@@ -349,6 +471,26 @@
   color: var(--text-secondary);
 }
 
+.collapseBtn {
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  border-radius: $radius-full;
+  width: 34px;
+  height: 28px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform $transition-fast, border-color $transition-fast, background $transition-fast;
+
+  &:hover {
+    background: var(--bg-tertiary);
+    border-color: rgba($primary-color, 0.35);
+    transform: translateY(-1px);
+  }
+}
+
 .dashboardChartsGrid {
   display: grid;
   gap: 20px;
@@ -364,6 +506,20 @@
 }
 
 .statsGrid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+
+  @include tablet {
+    grid-template-columns: 1fr;
+  }
+
+  @include mobile {
+    gap: 16px;
+  }
+}
+
+.detailsGrid {
   display: grid;
   gap: 20px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -429,6 +585,18 @@
   }
 }
 
+.chartHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+
+  @include mobile {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
 .chartTitle {
   font-size: 16px;
   font-weight: 600;
@@ -459,7 +627,6 @@
   flex-wrap: wrap;
 
   @include mobile {
-    width: 100%;
     justify-content: center;
   }
 }
@@ -582,6 +749,51 @@
   opacity: 0.55;
   pointer-events: none;
   z-index: -1;
+}
+
+.requestCell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.requestMain {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.requestPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: $radius-full;
+  font-size: 11px;
+  font-weight: 800;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pillSuccess {
+  color: var(--success-color, #22c55e);
+  border-color: rgba($success-color, 0.28);
+  background: rgba($success-color, 0.12);
+}
+
+.pillFailure {
+  color: var(--danger-color, #ef4444);
+  border-color: rgba($error-color, 0.28);
+  background: rgba($error-color, 0.12);
 }
 
 .legendList {

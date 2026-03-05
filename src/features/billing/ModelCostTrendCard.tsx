@@ -16,6 +16,8 @@ import { buildChartOptions, getHourChartMinWidth } from '@/utils/usage/chartConf
 import type { ModelPricingAnalytics } from './modelPricing/analyticsTypes';
 import type { CurrencySymbol } from './modelPricing/types';
 import { formatMoney } from './modelPricing/money';
+import { useBillingCollapse } from './collapse/useBillingCollapse';
+import { CollapseToggleButton } from './collapse/CollapseToggleButton';
 import styles from './BillingPage.module.scss';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler);
@@ -53,6 +55,7 @@ export function ModelCostTrendCard({
 }: ModelCostTrendCardProps) {
   const { t } = useTranslation();
   const [period, setPeriod] = useState<'hour' | 'day'>('hour');
+  const [collapsed, setCollapsed] = useBillingCollapse('chart-cost-trend');
 
   const series = analytics.trendByCurrency[selectedCurrency]?.[period];
 
@@ -115,43 +118,49 @@ export function ModelCostTrendCard({
           <h3 className={styles.chartTitle}>{t('billing.cost_trend')}</h3>
           <p className={styles.chartSubtitle}>{subtitle}</p>
         </div>
-        <div className={styles.chartControls}>
-          <button
-            type="button"
-            className={`${styles.chartControlBtn} ${period === 'hour' ? styles.active : ''}`}
-            onClick={() => setPeriod('hour')}
-          >
-            {t('usage_stats.by_hour')}
-          </button>
-          <button
-            type="button"
-            className={`${styles.chartControlBtn} ${period === 'day' ? styles.active : ''}`}
-            onClick={() => setPeriod('day')}
-          >
-            {t('usage_stats.by_day')}
-          </button>
+        <div className={styles.chartHeaderActions}>
+          <div className={styles.chartControls}>
+            <button
+              type="button"
+              className={`${styles.chartControlBtn} ${period === 'hour' ? styles.active : ''}`}
+              onClick={() => setPeriod('hour')}
+            >
+              {t('usage_stats.by_hour')}
+            </button>
+            <button
+              type="button"
+              className={`${styles.chartControlBtn} ${period === 'day' ? styles.active : ''}`}
+              onClick={() => setPeriod('day')}
+            >
+              {t('usage_stats.by_day')}
+            </button>
+          </div>
+          <CollapseToggleButton collapsed={collapsed} onToggle={() => setCollapsed((prev) => !prev)} />
         </div>
       </div>
 
-      <div className={styles.chartContent}>
-        {loading ? (
-          <div className={styles.chartEmpty}>{t('common.loading')}</div>
-        ) : !selectedCurrency ? (
-          <div className={styles.chartEmpty}>{t('billing.select_currency')}</div>
-        ) : !hasData ? (
-          <div className={styles.chartEmpty}>{t('billing.no_cost_data')}</div>
-        ) : (
-          <div className={styles.chartScroller}>
-            <div
-              className={styles.chartCanvas}
-              style={period === 'hour' ? { minWidth: getHourChartMinWidth(chartData.labels.length, isMobile) } : undefined}
-            >
-              <Line data={chartData} options={chartOptions} />
+      {collapsed ? null : (
+        <div className={styles.chartContent}>
+          {loading ? (
+            <div className={styles.chartEmpty}>{t('common.loading')}</div>
+          ) : !selectedCurrency ? (
+            <div className={styles.chartEmpty}>{t('billing.select_currency')}</div>
+          ) : !hasData ? (
+            <div className={styles.chartEmpty}>{t('billing.no_cost_data')}</div>
+          ) : (
+            <div className={styles.chartScroller}>
+              <div
+                className={styles.chartCanvas}
+                style={
+                  period === 'hour' ? { minWidth: getHourChartMinWidth(chartData.labels.length, isMobile) } : undefined
+                }
+              >
+                <Line data={chartData} options={chartOptions} />
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
-

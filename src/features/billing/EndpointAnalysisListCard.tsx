@@ -7,8 +7,11 @@ import type { EndpointAggregateForAnalysis } from './modelPricing/analyticsTypes
 import type { CurrencySymbol } from './modelPricing/types';
 import { formatMoney } from './modelPricing/money';
 import { sumAllCurrencies } from './modelPricing/analyticsUtils';
+import { useBillingCollapse } from './collapse/useBillingCollapse';
+import { CollapseToggleButton } from './collapse/CollapseToggleButton';
 import styles from '@/pages/UsagePage.module.scss';
 import filterStyles from './BillingModelPricesPage.module.scss';
+import billingStyles from './BillingPage.module.scss';
 
 export type EndpointAnalysisListCardProps = {
   loading: boolean;
@@ -49,6 +52,7 @@ const renderTopModels = (endpoint: EndpointAggregateForAnalysis, currency: Curre
 export function EndpointAnalysisListCard({ loading, endpoints, selectedCurrency }: EndpointAnalysisListCardProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
+  const [collapsed, setCollapsed] = useBillingCollapse('table-endpoint-analysis');
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -66,62 +70,73 @@ export function EndpointAnalysisListCard({ loading, endpoints, selectedCurrency 
   }, [endpoints, query, selectedCurrency]);
 
   return (
-    <Card title={t('billing.top_endpoints_title')} className={styles.detailsFixedCard}>
-      <div className={filterStyles.filtersRow}>
-        <div className={filterStyles.search}>
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('billing.search_placeholder')}
-            aria-label={t('billing.search_placeholder')}
-          />
-        </div>
-      </div>
-
-      {loading ? (
-        <div className={styles.hint}>{t('common.loading')}</div>
-      ) : rows.length ? (
-        <div className={styles.detailsScroll}>
-          <div className={styles.tableWrapper}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>{t('billing.endpoint')}</th>
-                  <th>{t('usage_stats.requests_count')}</th>
-                  <th>{t('usage_stats.tokens_count')}</th>
-                  <th>{t('billing.cost')}</th>
-                  <th>{t('billing.model_pricing_top_models')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((e) => {
-                  const tokens = e.inputTokens + e.outputBillableTokens;
-                  return (
-                    <tr key={e.endpointKey}>
-                      <td className={styles.modelCell}>{e.endpointKey}</td>
-                      <td>
-                        <span className={styles.requestCountCell}>
-                          <span>{e.requests.toLocaleString()}</span>
-                          <span className={styles.requestBreakdown}>
-                            (<span className={styles.statSuccess}>{e.successCount.toLocaleString()}</span>{' '}
-                            <span className={styles.statFailure}>{e.failureCount.toLocaleString()}</span>)
-                          </span>
-                        </span>
-                      </td>
-                      <td>{formatCompactNumber(tokens)}</td>
-                      <td>{renderCostList(e.costs)}</td>
-                      <td>{renderTopModels(e, selectedCurrency)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+    <Card
+      title={t('billing.top_endpoints_title')}
+      className={styles.detailsFixedCard}
+      extra={<CollapseToggleButton collapsed={collapsed} onToggle={() => setCollapsed((prev) => !prev)} />}
+    >
+      {collapsed ? null : (
+        <>
+          <div className={filterStyles.filtersRow}>
+            <div className={filterStyles.search}>
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t('billing.search_placeholder')}
+                aria-label={t('billing.search_placeholder')}
+              />
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className={styles.hint}>{t('usage_stats.no_data')}</div>
+
+          {loading ? (
+            <div className={styles.hint}>{t('common.loading')}</div>
+          ) : rows.length ? (
+            <div className={styles.detailsScroll}>
+              <div className={styles.tableWrapper}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>{t('billing.endpoint')}</th>
+                      <th>{t('usage_stats.requests_count')}</th>
+                      <th>{t('usage_stats.tokens_count')}</th>
+                      <th>{t('billing.cost')}</th>
+                      <th>{t('billing.model_pricing_top_models')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((e) => {
+                      const tokens = e.inputTokens + e.outputBillableTokens;
+                      return (
+                        <tr key={e.endpointKey}>
+                          <td className={styles.modelCell}>{e.endpointKey}</td>
+                          <td>
+                            <div className={billingStyles.requestCell}>
+                              <div className={billingStyles.requestMain}>{e.requests.toLocaleString()}</div>
+                              <div className={billingStyles.requestPills}>
+                                <span className={`${billingStyles.pill} ${billingStyles.pillSuccess}`}>
+                                  {t('stats.success')}: {e.successCount.toLocaleString()}
+                                </span>
+                                <span className={`${billingStyles.pill} ${billingStyles.pillFailure}`}>
+                                  {t('stats.failure')}: {e.failureCount.toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td>{formatCompactNumber(tokens)}</td>
+                          <td>{renderCostList(e.costs)}</td>
+                          <td>{renderTopModels(e, selectedCurrency)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className={styles.hint}>{t('usage_stats.no_data')}</div>
+          )}
+        </>
       )}
     </Card>
   );
 }
-

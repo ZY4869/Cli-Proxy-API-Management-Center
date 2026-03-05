@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import { formatCompactNumber } from '@/utils/usage';
+import { useBillingCollapse } from './collapse/useBillingCollapse';
+import { CollapseToggleButton } from './collapse/CollapseToggleButton';
 import styles from './BillingPage.module.scss';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
@@ -27,6 +29,7 @@ export type TopBarChartCardProps = {
   tokensLabel: string;
   costFormatter: (value: number) => string;
   emptyText: string;
+  collapseSectionId: string;
 };
 
 const MODE_COLORS: Record<TopBarChartViewMode, string> = {
@@ -59,9 +62,11 @@ export function TopBarChartCard({
   tokensLabel,
   costFormatter,
   emptyText,
+  collapseSectionId,
 }: TopBarChartCardProps) {
   const { t } = useTranslation();
   const [viewMode, setViewMode] = useState<TopBarChartViewMode>('cost');
+  const [collapsed, setCollapsed] = useBillingCollapse(collapseSectionId);
 
   const top = useMemo(() => {
     return items
@@ -153,43 +158,47 @@ export function TopBarChartCard({
           <h3 className={styles.chartTitle}>{title}</h3>
           <p className={styles.chartSubtitle}>{subtitle}</p>
         </div>
-        <div className={styles.chartControls}>
-          <button
-            type="button"
-            className={`${styles.chartControlBtn} ${viewMode === 'cost' ? styles.active : ''}`}
-            onClick={() => setViewMode('cost')}
-          >
-            {t('billing.sort_cost')}
-          </button>
-          <button
-            type="button"
-            className={`${styles.chartControlBtn} ${viewMode === 'requests' ? styles.active : ''}`}
-            onClick={() => setViewMode('requests')}
-          >
-            {t('billing.sort_requests')}
-          </button>
-          <button
-            type="button"
-            className={`${styles.chartControlBtn} ${viewMode === 'tokens' ? styles.active : ''}`}
-            onClick={() => setViewMode('tokens')}
-          >
-            {t('billing.sort_tokens')}
-          </button>
+        <div className={styles.chartHeaderActions}>
+          <div className={styles.chartControls}>
+            <button
+              type="button"
+              className={`${styles.chartControlBtn} ${viewMode === 'cost' ? styles.active : ''}`}
+              onClick={() => setViewMode('cost')}
+            >
+              {t('billing.sort_cost')}
+            </button>
+            <button
+              type="button"
+              className={`${styles.chartControlBtn} ${viewMode === 'requests' ? styles.active : ''}`}
+              onClick={() => setViewMode('requests')}
+            >
+              {t('billing.sort_requests')}
+            </button>
+            <button
+              type="button"
+              className={`${styles.chartControlBtn} ${viewMode === 'tokens' ? styles.active : ''}`}
+              onClick={() => setViewMode('tokens')}
+            >
+              {t('billing.sort_tokens')}
+            </button>
+          </div>
+          <CollapseToggleButton collapsed={collapsed} onToggle={() => setCollapsed((prev) => !prev)} />
         </div>
       </div>
 
-      <div className={styles.chartContent}>
-        {loading ? (
-          <div className={styles.chartEmpty}>{t('common.loading')}</div>
-        ) : !hasData ? (
-          <div className={styles.chartEmpty}>{emptyText}</div>
-        ) : (
-          <div className={styles.barChartContent}>
-            <Bar data={chartData} options={chartOptions} />
-          </div>
-        )}
-      </div>
+      {collapsed ? null : (
+        <div className={styles.chartContent}>
+          {loading ? (
+            <div className={styles.chartEmpty}>{t('common.loading')}</div>
+          ) : !hasData ? (
+            <div className={styles.chartEmpty}>{emptyText}</div>
+          ) : (
+            <div className={styles.barChartContent}>
+              <Bar data={chartData} options={chartOptions} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
-

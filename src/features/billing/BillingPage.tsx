@@ -15,12 +15,11 @@ import { formatMoney } from './modelPricing/money';
 import { loadSelectedCurrency, resolveSelectedCurrency, saveSelectedCurrency } from './modelPricing/selectedCurrency';
 import { ModelBillingKpiCards } from './ModelBillingKpiCards';
 import { ModelCostTrendCard } from './ModelCostTrendCard';
-import { BillingModelPricesCard } from './BillingModelPricesCard';
 import { TopBarChartCard } from './TopBarChartCard';
 import { ModelBillingFiltersBar } from './ModelBillingFiltersBar';
 import { ModelListCard } from './ModelListCard';
 import { EndpointAnalysisListCard } from './EndpointAnalysisListCard';
-import { ApiKeyBillingCard } from './ApiKeyBillingCard';
+import { BillingDetailsCard } from './BillingDetailsCard';
 import styles from './BillingPage.module.scss';
 
 const TIME_RANGE_STORAGE_KEY = 'cli-proxy-billing-time-range-v1';
@@ -289,26 +288,23 @@ export function BillingPage() {
           tokensLabel={t('billing.tokens')}
           costFormatter={(v) => formatMoney(resolvedSelectedCurrency, v)}
           emptyText={t('billing.no_cost_data')}
+          collapseSectionId="chart-top-models"
         />
       </div>
 
-      <BillingModelPricesCard />
-
-      <div className={styles.dashboardChartsGrid}>
-        <TopBarChartCard
-          loading={loading && !usage}
-          items={endpointTopItems}
-          isDark={isDark}
-          title={t('billing.top_endpoints_title')}
-          subtitle={`${timeRangeLabel} | ${resolvedSelectedCurrency || t('billing.select_currency')}`}
-          costLabel={t('billing.cost')}
-          requestsLabel={t('billing.requests')}
-          tokensLabel={t('billing.tokens')}
-          costFormatter={(v) => formatMoney(resolvedSelectedCurrency, v)}
-          emptyText={t('billing.no_endpoints')}
-        />
-        <ApiKeyBillingCard loading={loading && !usage} keys={analytics.keys} selectedCurrency={resolvedSelectedCurrency} />
-      </div>
+      <TopBarChartCard
+        loading={loading && !usage}
+        items={endpointTopItems}
+        isDark={isDark}
+        title={t('billing.top_endpoints_title')}
+        subtitle={`${timeRangeLabel} | ${resolvedSelectedCurrency || t('billing.select_currency')}`}
+        costLabel={t('billing.cost')}
+        requestsLabel={t('billing.requests')}
+        tokensLabel={t('billing.tokens')}
+        costFormatter={(v) => formatMoney(resolvedSelectedCurrency, v)}
+        emptyText={t('billing.no_endpoints')}
+        collapseSectionId="chart-top-endpoints"
+      />
 
       <div className={styles.detailsGrid}>
         <ModelListCard loading={loading && !usage} models={analytics.models} selectedCurrency={resolvedSelectedCurrency} />
@@ -318,6 +314,14 @@ export function BillingPage() {
           selectedCurrency={resolvedSelectedCurrency}
         />
       </div>
+
+      <BillingDetailsCard
+        loading={loading && !usage}
+        timeRangeLabel={timeRangeLabel}
+        details={details}
+        pricingByModel={pricingByModel}
+        selectedCurrency={resolvedSelectedCurrency}
+      />
     </div>
   );
 }

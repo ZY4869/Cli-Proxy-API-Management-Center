@@ -2,19 +2,23 @@ import { create } from 'zustand';
 import type { ModelPricingExportV1, ModelPricingV1 } from './types';
 import { loadModelPricingMap, saveModelPricingMap } from './storage';
 import { parseModelPricingExportV1, parseModelPricingV1 } from './schema';
+import { loadDefaultCurrencySymbol, saveDefaultCurrencySymbol } from './defaultCurrency';
 
 type ModelPricingStoreState = {
   pricingByModel: Record<string, ModelPricingV1>;
+  defaultCurrencySymbol: string;
   setPricingForModel: (modelName: string, pricing: unknown) => void;
   removePricingForModel: (modelName: string) => void;
   replaceAll: (pricingByModel: Record<string, ModelPricingV1>) => void;
   reload: () => void;
+  setDefaultCurrencySymbol: (symbol: string) => void;
   exportJson: () => ModelPricingExportV1;
   importJsonMergeOverwrite: (payload: unknown) => { importedModels: number };
 };
 
 export const useModelPricingStore = create<ModelPricingStoreState>()((set, get) => ({
   pricingByModel: loadModelPricingMap(),
+  defaultCurrencySymbol: loadDefaultCurrencySymbol(),
 
   setPricingForModel: (modelName, pricing) => {
     const name = String(modelName ?? '').trim();
@@ -45,6 +49,12 @@ export const useModelPricingStore = create<ModelPricingStoreState>()((set, get) 
     set({ pricingByModel: loadModelPricingMap() });
   },
 
+  setDefaultCurrencySymbol: (symbol) => {
+    const safe = String(symbol ?? '').trim();
+    saveDefaultCurrencySymbol(safe);
+    set({ defaultCurrencySymbol: loadDefaultCurrencySymbol() });
+  },
+
   exportJson: () => {
     const state = get();
     return {
@@ -64,4 +74,3 @@ export const useModelPricingStore = create<ModelPricingStoreState>()((set, get) 
     return { importedModels };
   },
 }));
-

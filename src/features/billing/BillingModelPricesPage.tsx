@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SecondaryScreenShell } from '@/components/common/SecondaryScreenShell';
@@ -10,6 +10,7 @@ import { useNotificationStore } from '@/stores';
 import type { ModelPricingV1 } from './modelPricing/types';
 import { useModelPricingStore } from './modelPricing/useModelPricingStore';
 import { useModelPriceModels } from './modelPrices/useModelPriceModels';
+import { PricingSummaryBadges } from './modelPrices/PricingSummaryBadges';
 import { ModelPricingEditModal } from './ModelPricingEditModal';
 import styles from './BillingModelPricesPage.module.scss';
 
@@ -19,25 +20,6 @@ type ModelRow = {
   description?: string;
   pricing: ModelPricingV1 | null;
   configured: boolean;
-};
-
-const toNonNegative = (value: unknown): number => {
-  const num = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(num)) return 0;
-  return Math.max(num, 0);
-};
-
-const formatPricingSummary = (pricing: ModelPricingV1 | null): string => {
-  if (!pricing) return '--';
-  const symbol = String(pricing.currencySymbol ?? '').trim() || '$';
-  const tiers = Array.isArray(pricing.tiers) ? pricing.tiers : [];
-  const cache = pricing.cachePer1M;
-  const cacheLabel = cache === undefined ? 'cache:follow' : `cache:${toNonNegative(cache).toFixed(4)}`;
-  if (tiers.length === 1 && tiers[0]?.maxPromptTokens === null) {
-    const t0 = tiers[0];
-    return `${symbol} flat in:${toNonNegative(t0.promptPer1M).toFixed(4)} out:${toNonNegative(t0.completionPer1M).toFixed(4)} ${cacheLabel}`;
-  }
-  return `${symbol} tiers:${tiers.length} ${cacheLabel}`;
 };
 
 export function BillingModelPricesPage() {
@@ -52,7 +34,11 @@ export function BillingModelPricesPage() {
 
   const [query, setQuery] = useState('');
   const [onlyMissing, setOnlyMissing] = useState(false);
-  const [editModel, setEditModel] = useState<string | null>(null);
+  const editModel = (() => {
+    const raw = searchParams.get('model');
+    const name = String(raw ?? '').trim();
+    return name ? name : null;
+  })();
 
   const rows = useMemo((): ModelRow[] => {
     const q = query.trim().toLowerCase();
@@ -96,24 +82,21 @@ export function BillingModelPricesPage() {
 
   const openEdit = useCallback(
     (modelName: string) => {
-      setEditModel(modelName);
+      const name = String(modelName ?? '').trim();
+      if (!name) return;
+      const next = new URLSearchParams(searchParams);
+      next.set('model', name);
+      setSearchParams(next);
     },
-    []
+    [searchParams, setSearchParams]
   );
 
-  const clearModelSearchParam = useCallback(() => {
+  const closeEdit = useCallback(() => {
     if (!searchParams.get('model')) return;
     const next = new URLSearchParams(searchParams);
     next.delete('model');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
-
-  useEffect(() => {
-    const fromQuery = searchParams.get('model');
-    if (!fromQuery) return;
-    if (editModel) return;
-    openEdit(fromQuery);
-  }, [editModel, openEdit, searchParams]);
 
   const subtitle = useMemo(() => {
     const hasModels = models.length > 0;
@@ -196,7 +179,7 @@ export function BillingModelPricesPage() {
                     ) : null}
                   </div>
                   <div className={styles.priceSummary}>
-                    {formatPricingSummary(row.pricing)}
+                    <PricingSummaryBadges pricing={row.pricing} />
                   </div>
                 <span
                   className={`${styles.statusBadge} ${row.configured ? styles.statusConfigured : styles.statusMissing}`}
@@ -234,7 +217,7 @@ export function BillingModelPricesPage() {
                     <div className={styles.modelNameSub}>{t('billing.model_prices_orphan_tag')}</div>
                   </div>
                   <div className={styles.priceSummary}>
-                    {formatPricingSummary(pricing)}
+                    <PricingSummaryBadges pricing={pricing} />
                   </div>
                   <span className={`${styles.statusBadge} ${styles.statusConfigured}`}>
                     {t('billing.model_prices_configured')}
@@ -252,25 +235,20 @@ export function BillingModelPricesPage() {
       ) : null}
 
       <ModelPricingEditModal
-        open={editModel !== null}
+        open={Boolean(editModel)}
         modelName={editModel ?? ''}
         initialPricing={editModel ? pricingByModel[editModel] ?? null : null}
-        onClose={() => {
-          setEditModel(null);
-          clearModelSearchParam();
-        }}
+        onClose={closeEdit}
         onDelete={() => {
           if (!editModel) return;
           removePricingForModel(editModel);
-          setEditModel(null);
-          clearModelSearchParam();
+          closeEdit();
           showNotification(t('billing.model_prices_deleted'), 'success');
         }}
         onSave={(pricing) => {
           if (!editModel) return;
           setPricingForModel(editModel, pricing);
-          setEditModel(null);
-          clearModelSearchParam();
+          closeEdit();
           showNotification(t('billing.model_prices_saved'), 'success');
         }}
       />

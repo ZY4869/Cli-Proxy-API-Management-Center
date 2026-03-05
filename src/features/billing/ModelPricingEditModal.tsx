@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { useNotificationStore } from '@/stores';
+import { useModelPricingStore } from './modelPricing/useModelPricingStore';
 import { ModelTierEditor, type ModelTierDraft } from './ModelTierEditor';
 import type { ModelPricingTierV1, ModelPricingV1 } from './modelPricing/types';
 import { parseModelPricingV1 } from './modelPricing/schema';
@@ -47,6 +48,7 @@ export function ModelPricingEditModal({
 }: ModelPricingEditModalProps) {
   const { t } = useTranslation();
   const showNotification = useNotificationStore((s) => s.showNotification);
+  const defaultCurrencySymbol = useModelPricingStore((s) => s.defaultCurrencySymbol);
 
   const [currencySymbol, setCurrencySymbol] = useState('$');
   const [cachePer1M, setCachePer1M] = useState('');
@@ -56,7 +58,7 @@ export function ModelPricingEditModal({
   const [tierDrafts, setTierDrafts] = useState<ModelTierDraft[]>([emptyTierDraft()]);
 
   useEffect(() => {
-    const currency = String(initialPricing?.currencySymbol ?? '').trim() || '$';
+    const currency = String(initialPricing?.currencySymbol ?? '').trim() || String(defaultCurrencySymbol ?? '').trim() || '$';
     const cache = initialPricing?.cachePer1M;
     const tiers = initialPricing?.tiers ?? [];
     const isFlat = tiers.length === 1 && tiers[0]?.maxPromptTokens === null;
@@ -68,7 +70,7 @@ export function ModelPricingEditModal({
     setFlatPrompt(infinityTier ? String(infinityTier.promptPer1M) : '');
     setFlatCompletion(infinityTier ? String(infinityTier.completionPer1M) : '');
     setTierDrafts(tiers.length ? toTierDrafts(tiers) : [emptyTierDraft()]);
-  }, [initialPricing, modelName, open]);
+  }, [defaultCurrencySymbol, initialPricing, modelName, open]);
 
   const cacheHint = useMemo(() => t('billing.model_pricing_cache_hint'), [t]);
 

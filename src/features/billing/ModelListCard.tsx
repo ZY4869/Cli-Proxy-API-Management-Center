@@ -8,8 +8,11 @@ import type { ModelAggregate } from './modelPricing/analyticsTypes';
 import { sumAllCurrencies } from './modelPricing/analyticsUtils';
 import type { CurrencySymbol } from './modelPricing/types';
 import { formatMoney } from './modelPricing/money';
+import { useBillingCollapse } from './collapse/useBillingCollapse';
+import { CollapseToggleButton } from './collapse/CollapseToggleButton';
 import styles from '@/pages/UsagePage.module.scss';
 import filterStyles from './BillingModelPricesPage.module.scss';
+import billingStyles from './BillingPage.module.scss';
 
 export type ModelListCardProps = {
   loading: boolean;
@@ -45,6 +48,7 @@ export function ModelListCard({ loading, models, selectedCurrency }: ModelListCa
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [onlyMissing, setOnlyMissing] = useState(false);
+  const [collapsed, setCollapsed] = useBillingCollapse('table-model-stats');
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -64,69 +68,81 @@ export function ModelListCard({ loading, models, selectedCurrency }: ModelListCa
   }, [models, onlyMissing, query, selectedCurrency]);
 
   return (
-    <Card title={t('billing.model_pricing_models')} className={styles.detailsFixedCard}>
-      <div className={filterStyles.filtersRow}>
-        <div className={filterStyles.search}>
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('billing.model_pricing_search_model')}
-            aria-label={t('billing.model_pricing_search_model')}
-          />
-        </div>
-        <ToggleSwitch
-          checked={onlyMissing}
-          onChange={setOnlyMissing}
-          label={t('billing.model_pricing_only_missing')}
-          ariaLabel={t('billing.model_pricing_only_missing')}
-        />
-      </div>
-
-      {loading ? (
-        <div className={styles.hint}>{t('common.loading')}</div>
-      ) : rows.length ? (
-        <div className={styles.detailsScroll}>
-          <div className={styles.tableWrapper}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>{t('usage_stats.model_name')}</th>
-                  <th>{t('usage_stats.requests_count')}</th>
-                  <th>{t('usage_stats.tokens_count')}</th>
-                  <th>{t('billing.cost')}</th>
-                  <th>{t('billing.tier')}</th>
-                  <th>{t('billing.filter_status')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((m) => {
-                  const tokens = m.inputTokens + m.outputBillableTokens;
-                  const configured = m.missingPricingRequests <= 0;
-                  return (
-                    <tr key={m.modelName}>
-                      <td className={styles.modelCell}>{m.modelName}</td>
-                      <td>
-                        <span className={styles.requestCountCell}>
-                          <span>{m.requests.toLocaleString()}</span>
-                          <span className={styles.requestBreakdown}>
-                            (<span className={styles.statSuccess}>{m.successCount.toLocaleString()}</span>{' '}
-                            <span className={styles.statFailure}>{m.failureCount.toLocaleString()}</span>)
-                          </span>
-                        </span>
-                      </td>
-                      <td>{formatCompactNumber(tokens)}</td>
-                      <td>{renderCostList(m.costs)}</td>
-                      <td>{renderTierSummary(m)}</td>
-                      <td>{configured ? t('billing.model_prices_configured') : t('billing.model_prices_missing')}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+    <Card
+      title={t('billing.model_pricing_models')}
+      className={styles.detailsFixedCard}
+      extra={<CollapseToggleButton collapsed={collapsed} onToggle={() => setCollapsed((prev) => !prev)} />}
+    >
+      {collapsed ? null : (
+        <>
+          <div className={filterStyles.filtersRow}>
+            <div className={filterStyles.search}>
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t('billing.model_pricing_search_model')}
+                aria-label={t('billing.model_pricing_search_model')}
+              />
+            </div>
+            <ToggleSwitch
+              checked={onlyMissing}
+              onChange={setOnlyMissing}
+              label={t('billing.model_pricing_only_missing')}
+              ariaLabel={t('billing.model_pricing_only_missing')}
+            />
           </div>
-        </div>
-      ) : (
-        <div className={styles.hint}>{t('usage_stats.no_data')}</div>
+
+          {loading ? (
+            <div className={styles.hint}>{t('common.loading')}</div>
+          ) : rows.length ? (
+            <div className={styles.detailsScroll}>
+              <div className={styles.tableWrapper}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>{t('usage_stats.model_name')}</th>
+                      <th>{t('usage_stats.requests_count')}</th>
+                      <th>{t('usage_stats.tokens_count')}</th>
+                      <th>{t('billing.cost')}</th>
+                      <th>{t('billing.tier')}</th>
+                      <th>{t('billing.filter_status')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((m) => {
+                      const tokens = m.inputTokens + m.outputBillableTokens;
+                      const configured = m.missingPricingRequests <= 0;
+                      return (
+                        <tr key={m.modelName}>
+                          <td className={styles.modelCell}>{m.modelName}</td>
+                          <td>
+                            <div className={billingStyles.requestCell}>
+                              <div className={billingStyles.requestMain}>{m.requests.toLocaleString()}</div>
+                              <div className={billingStyles.requestPills}>
+                                <span className={`${billingStyles.pill} ${billingStyles.pillSuccess}`}>
+                                  {t('stats.success')}: {m.successCount.toLocaleString()}
+                                </span>
+                                <span className={`${billingStyles.pill} ${billingStyles.pillFailure}`}>
+                                  {t('stats.failure')}: {m.failureCount.toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td>{formatCompactNumber(tokens)}</td>
+                          <td>{renderCostList(m.costs)}</td>
+                          <td>{renderTierSummary(m)}</td>
+                          <td>{configured ? t('billing.model_prices_configured') : t('billing.model_prices_missing')}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className={styles.hint}>{t('usage_stats.no_data')}</div>
+          )}
+        </>
       )}
     </Card>
   );
