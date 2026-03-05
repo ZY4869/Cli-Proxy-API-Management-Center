@@ -84,8 +84,10 @@ export function ModelTierEditor({ tiers, onChange }: ModelTierEditorProps) {
     <div ref={rootRef}>
       <div className={styles.tierList}>
         {tiers.map((tier, index) => {
-          const title = tier.label.trim() || t('billing.tier_n', { n: index + 1 });
           const isInfinity = tier.maxPromptTokens.trim() === '';
+          const maxValue = Number(tier.maxPromptTokens);
+          const maxLabel = Number.isFinite(maxValue) ? maxValue.toLocaleString() : tier.maxPromptTokens.trim();
+          const title = tier.label.trim() || (isInfinity ? '∞' : `<=${maxLabel}`);
           const infinityCount = tiers.filter((t) => t.maxPromptTokens.trim() === '').length;
           const canDelete = tiers.length > 1 && (!isInfinity || infinityCount > 1);
 
@@ -93,7 +95,7 @@ export function ModelTierEditor({ tiers, onChange }: ModelTierEditorProps) {
             <div key={tier.id} className={styles.tierRow} data-tier-id={tier.id}>
               <div className={styles.tierRowTop}>
                 <div className={styles.tierTitle}>
-                  {title} {isInfinity ? '∞' : ''}
+                  {title}
                 </div>
                 <div className={styles.tierActions}>
                   <Button
@@ -173,4 +175,3 @@ export function ModelTierEditor({ tiers, onChange }: ModelTierEditorProps) {
     </div>
   );
 }
-

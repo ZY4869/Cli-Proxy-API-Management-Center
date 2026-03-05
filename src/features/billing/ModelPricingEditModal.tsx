@@ -72,6 +72,40 @@ export function ModelPricingEditModal({
 
   const cacheHint = useMemo(() => t('billing.model_pricing_cache_hint'), [t]);
 
+  const handleUseTiersChange = (next: boolean) => {
+    setUseTiers(next);
+    if (!next) return;
+
+    setTierDrafts((prev) => {
+      const drafts = Array.isArray(prev) && prev.length ? [...prev] : [emptyTierDraft()];
+      const infinityIndexes = drafts
+        .map((d, idx) => (d.maxPromptTokens.trim() === '' ? idx : -1))
+        .filter((idx) => idx >= 0);
+
+      if (infinityIndexes.length === 0) {
+        drafts.push(emptyTierDraft());
+      }
+
+      // UX: turning on tiered pricing should immediately show a "threshold + infinity" setup
+      // so users can fill in something like: <=200000 and >200000.
+      if (drafts.length === 1 && drafts[0]?.maxPromptTokens.trim() === '') {
+        const base = drafts[0];
+        return [
+          {
+            id: generateId(),
+            maxPromptTokens: '200000',
+            promptPer1M: base.promptPer1M || flatPrompt || '0',
+            completionPer1M: base.completionPer1M || flatCompletion || '0',
+            label: '',
+          },
+          base,
+        ];
+      }
+
+      return drafts;
+    });
+  };
+
   const handleSave = () => {
     try {
       const raw = {
@@ -147,7 +181,7 @@ export function ModelPricingEditModal({
         <div className={styles.formField}>
           <ToggleSwitch
             checked={useTiers}
-            onChange={setUseTiers}
+            onChange={handleUseTiersChange}
             label={t('billing.model_pricing_use_tiers')}
             ariaLabel={t('billing.model_pricing_use_tiers')}
           />
@@ -185,4 +219,3 @@ export function ModelPricingEditModal({
     </Modal>
   );
 }
-
