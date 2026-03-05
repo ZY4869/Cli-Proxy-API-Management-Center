@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SecondaryScreenShell } from '@/components/common/SecondaryScreenShell';
@@ -52,7 +52,11 @@ export function BillingModelPricesPage() {
 
   const [query, setQuery] = useState('');
   const [onlyMissing, setOnlyMissing] = useState(false);
-  const [editModel, setEditModel] = useState<string | null>(null);
+  const editModel = (() => {
+    const raw = searchParams.get('model');
+    const name = String(raw ?? '').trim();
+    return name ? name : null;
+  })();
 
   const rows = useMemo((): ModelRow[] => {
     const q = query.trim().toLowerCase();
@@ -96,24 +100,21 @@ export function BillingModelPricesPage() {
 
   const openEdit = useCallback(
     (modelName: string) => {
-      setEditModel(modelName);
+      const name = String(modelName ?? '').trim();
+      if (!name) return;
+      const next = new URLSearchParams(searchParams);
+      next.set('model', name);
+      setSearchParams(next);
     },
-    []
+    [searchParams, setSearchParams]
   );
 
-  const clearModelSearchParam = useCallback(() => {
+  const closeEdit = useCallback(() => {
     if (!searchParams.get('model')) return;
     const next = new URLSearchParams(searchParams);
     next.delete('model');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
-
-  useEffect(() => {
-    const fromQuery = searchParams.get('model');
-    if (!fromQuery) return;
-    if (editModel) return;
-    openEdit(fromQuery);
-  }, [editModel, openEdit, searchParams]);
 
   const subtitle = useMemo(() => {
     const hasModels = models.length > 0;
@@ -252,25 +253,20 @@ export function BillingModelPricesPage() {
       ) : null}
 
       <ModelPricingEditModal
-        open={editModel !== null}
+        open={Boolean(editModel)}
         modelName={editModel ?? ''}
         initialPricing={editModel ? pricingByModel[editModel] ?? null : null}
-        onClose={() => {
-          setEditModel(null);
-          clearModelSearchParam();
-        }}
+        onClose={closeEdit}
         onDelete={() => {
           if (!editModel) return;
           removePricingForModel(editModel);
-          setEditModel(null);
-          clearModelSearchParam();
+          closeEdit();
           showNotification(t('billing.model_prices_deleted'), 'success');
         }}
         onSave={(pricing) => {
           if (!editModel) return;
           setPricingForModel(editModel, pricing);
-          setEditModel(null);
-          clearModelSearchParam();
+          closeEdit();
           showNotification(t('billing.model_prices_saved'), 'success');
         }}
       />

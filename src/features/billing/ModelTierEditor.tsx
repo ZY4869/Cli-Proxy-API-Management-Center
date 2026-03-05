@@ -25,6 +25,45 @@ export function ModelTierEditor({ tiers, onChange }: ModelTierEditorProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const lastAddedIdRef = useRef<string>('');
 
+  const titlesById = (() => {
+    const toNonNegative = (value: unknown): number => {
+      const num = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(num)) return 0;
+      return Math.max(num, 0);
+    };
+
+    const formatBound = (value: number): string => Math.round(toNonNegative(value)).toLocaleString();
+
+    const normalized = tiers.map((tier, index) => {
+      const label = tier.label.trim();
+      const isInfinity = tier.maxPromptTokens.trim() === '';
+      const max = isInfinity ? Number.POSITIVE_INFINITY : toNonNegative(tier.maxPromptTokens);
+      return { id: tier.id, label, max, isInfinity, index };
+    });
+
+    const sorted = [...normalized].sort((a, b) => (a.max !== b.max ? a.max - b.max : a.index - b.index));
+
+    const result = new Map<string, string>();
+    let prevFiniteMax: number | null = null;
+    for (const entry of sorted) {
+      if (entry.label) {
+        result.set(entry.id, entry.label);
+      } else if (entry.isInfinity) {
+        result.set(entry.id, prevFiniteMax === null ? '∞' : `>${formatBound(prevFiniteMax)}`);
+      } else if (prevFiniteMax === null) {
+        result.set(entry.id, `≤${formatBound(entry.max)}`);
+      } else {
+        const lower = prevFiniteMax + 1;
+        result.set(entry.id, lower <= entry.max ? `${formatBound(lower)}–${formatBound(entry.max)}` : `≤${formatBound(entry.max)}`);
+      }
+
+      if (!entry.isInfinity && Number.isFinite(entry.max)) {
+        prevFiniteMax = entry.max;
+      }
+    }
+    return result;
+  })();
+
   useEffect(() => {
     const id = lastAddedIdRef.current;
     if (!id) return;
@@ -85,9 +124,7 @@ export function ModelTierEditor({ tiers, onChange }: ModelTierEditorProps) {
       <div className={styles.tierList}>
         {tiers.map((tier, index) => {
           const isInfinity = tier.maxPromptTokens.trim() === '';
-          const maxValue = Number(tier.maxPromptTokens);
-          const maxLabel = Number.isFinite(maxValue) ? maxValue.toLocaleString() : tier.maxPromptTokens.trim();
-          const title = tier.label.trim() || (isInfinity ? '∞' : `<=${maxLabel}`);
+          const title = titlesById.get(tier.id) ?? (isInfinity ? '∞' : `≤${tier.maxPromptTokens}`);
           const infinityCount = tiers.filter((t) => t.maxPromptTokens.trim() === '').length;
           const canDelete = tiers.length > 1 && (!isInfinity || infinityCount > 1);
 
