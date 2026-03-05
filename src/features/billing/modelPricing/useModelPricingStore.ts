@@ -1,8 +1,9 @@
 import { create } from 'zustand';
-import type { ModelPricingExportV1, ModelPricingV1 } from './types';
+import type { ModelPricingExportV1, ModelPricingExportV2, ModelPricingV1 } from './types';
 import { loadModelPricingMap, saveModelPricingMap } from './storage';
 import { parseModelPricingExportV1, parseModelPricingV1 } from './schema';
 import { loadDefaultCurrencySymbol, saveDefaultCurrencySymbol } from './defaultCurrency';
+import { buildModelPricingTemplateExportV2, parseModelPricingExportV2Lenient } from './templateExport';
 
 type ModelPricingStoreState = {
   pricingByModel: Record<string, ModelPricingV1>;
@@ -13,7 +14,8 @@ type ModelPricingStoreState = {
   reload: () => void;
   setDefaultCurrencySymbol: (symbol: string) => void;
   exportJson: () => ModelPricingExportV1;
-  importJsonMergeOverwrite: (payload: unknown) => { importedModels: number };
+  exportTemplateJson: (modelNames: string[]) => ModelPricingExportV2;
+  importJsonMergeOverwrite: (payload: unknown) => { importedModels: number; skippedModels: number; invalidModels: string[] };
 };
 
 export const useModelPricingStore = create<ModelPricingStoreState>()((set, get) => ({
@@ -46,7 +48,10 @@ export const useModelPricingStore = create<ModelPricingStoreState>()((set, get) 
   },
 
   reload: () => {
-    set({ pricingByModel: loadModelPricingMap() });
+    set({
+      pricingByModel: loadModelPricingMap(),
+      defaultCurrencySymbol: loadDefaultCurrencySymbol(),
+    });
   },
 
   setDefaultCurrencySymbol: (symbol) => {
@@ -64,13 +69,28 @@ export const useModelPricingStore = create<ModelPricingStoreState>()((set, get) 
     };
   },
 
+  exportTemplateJson: (modelNames) => {
+    const state = get();
+    return buildModelPricingTemplateExportV2({
+      modelNames: Array.isArray(modelNames) ? modelNames : [],
+      pricingByModel: state.pricingByModel,
+      defaultCurrencySymbol: state.defaultCurrencySymbol,
+      exportedAt: new Date().toISOString(),
+    });
+  },
+
   importJsonMergeOverwrite: (payload) => {
-    const parsed = parseModelPricingExportV1(payload);
-    const incoming = parsed.models ?? {};
+    const version = payload !== null && typeof payload === 'object' && (payload as any).version;
+    const resolved = version === 2 ? parseModelPricingExportV2Lenient(payload) : null;
+
+    const incoming = resolved ? resolved.models : parseModelPricingExportV1(payload).models ?? {};
     const importedModels = Object.keys(incoming).length;
+    const skippedModels = resolved ? resolved.skippedModels : 0;
+    const invalidModels = resolved ? resolved.invalidModels : [];
+
     const next = { ...get().pricingByModel, ...incoming };
     saveModelPricingMap(next);
     set({ pricingByModel: next });
-    return { importedModels };
+    return { importedModels, skippedModels, invalidModels };
   },
 }));

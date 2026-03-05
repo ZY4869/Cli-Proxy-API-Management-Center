@@ -1016,7 +1016,8 @@
     "go_to_billing": "去计费配置",
     "endpoint_cost_need_rule": "请先配置端点计费规则",
     "endpoint_cost_missing_rules": "缺失规则：{{missingRequests}} 次请求",
-    "endpoint_cost_missing_rules_hint": "部分请求缺少端点计费规则"
+    "endpoint_cost_missing_rules_hint": "部分请求缺少端点计费规则",
+    "request_events_scope_notice": "来源：/usage 事件明细；如需与 Billing 对账，请保持相同时间范围与过滤条件。"
   },
   "stats": {
     "success": "成功",
@@ -1081,7 +1082,7 @@
     "clear_filters": "清空筛选",
     "trace_button": "请求追踪",
     "trace_title": "请求追踪 (V1)",
-    "trace_notice": "V1 通过日志与 usage 事件做启发式关联，结果为估算，不是严格 request_id 级精准匹配。",
+    "trace_notice": "优先按 request_id 匹配；缺少 request_id 时回退到按路径、模型和时间的启发式关联，结果仍为估算。",
     "trace_log_info": "日志事件",
     "trace_candidates_title": "Usage 候选匹配",
     "trace_loading": "正在匹配 usage 事件...",
@@ -1115,7 +1116,8 @@
     "lines": "行",
     "removed": "已过滤",
     "upgrade_required_title": "需要升级 CLI Proxy API",
-    "upgrade_required_desc": "当前服务器版本不支持日志查看功能，请升级到最新版本的 CLI Proxy API 以使用此功能。"
+    "upgrade_required_desc": "当前服务器版本不支持日志查看功能，请升级到最新版本的 CLI Proxy API 以使用此功能。",
+    "scope_notice": "这里展示的是原始文本日志/排障日志，不是 /usage 或 Billing 的同口径明细，不能直接 1:1 对账。"
   },
   "config_management": {
     "title": "配置面板",
@@ -1592,7 +1594,8 @@
       "disable_confirm_title": "确认禁用模型",
       "disable_error": "禁用失败",
       "disable_error_no_provider": "无法识别渠道",
-      "disable_error_provider_not_found": "未找到渠道配置：{{provider}}"
+      "disable_error_provider_not_found": "未找到渠道配置：{{provider}}",
+      "scope_notice": "来源：/usage 事件明细；与 Billing 对账时请保持相同时间范围和过滤器。"
     }
   },
   "backup": {
@@ -1692,8 +1695,8 @@
     "select_currency": "请选择币种",
     "default_currency": "默认货币",
     "default_currency_help": "用于新建模型定价的默认币种符号",
-    "pricing_flat": "固定",
-    "pricing_tiers": "阶梯 {{count}}",
+    "pricing_flat": "📌 固定",
+    "pricing_tiers": "📶 阶梯 {{count}}",
     "pricing_prompt": "提示",
     "pricing_completion": "补全",
     "pricing_cache": "缓存",
@@ -1705,12 +1708,15 @@
     "billing_details_filtered_missing": "缺失定价：{{count}}",
     "billing_details_filtered_other_currency": "非当前币种：{{count}}",
     "billing_details_no_rows": "暂无明细",
-    "billing_details_no_rows_filtered": "当前币种下无可展示请求（可切换币种或开启包含缺失/其它币种）",
+    "billing_details_no_rows_filtered": "当前筛选范围下没有当前币种已计费请求，可切换币种或关闭该过滤器。",
     "model_pricing_export": "导出模型定价",
+    "model_pricing_export_template": "导出全模型模板",
     "model_pricing_import": "导入模型定价",
     "model_pricing_export_success": "已导出模型定价",
+    "model_pricing_export_template_success": "已导出 {{models}} 个模型模板",
     "model_pricing_export_failed": "导出模型定价失败",
     "model_pricing_import_success": "已导入 {{models}} 个模型定价",
+    "model_pricing_import_skipped": "跳过 {{count}} 个未填写/无效",
     "model_pricing_import_failed": "导入模型定价失败",
     "model_pricing_invalid": "模型定价配置无效",
     "model_pricing_currency_symbol": "币种符号",
@@ -1863,6 +1869,10 @@
     "model_prices_cache_hint": "若留空，缓存价格会默认等于输入价格。",
     "model_prices_empty_models": "未获取到模型列表。请连接后刷新，或导入 Usage 数据以显示回退模型。",
     "model_prices_saved": "已保存模型价格",
-    "model_prices_deleted": "已删除模型价格"
+    "model_prices_deleted": "已删除模型价格",
+    "billing_details_only_selected_currency": "仅显示当前币种已计费请求",
+    "billing_details_scope_all_requests": "显示全部请求",
+    "billing_details_scope_current_currency": "仅显示当前币种已计费请求",
+    "billing_details_other_currency_badge": "其它币种"
   }
 }

@@ -39,6 +39,7 @@ export interface UsageDetail {
   timestamp: string;
   source: string;
   auth_index: number;
+  request_id?: string;
   tokens: {
     input_tokens: number;
     output_tokens: number;
@@ -50,6 +51,7 @@ export interface UsageDetail {
   failed: boolean;
   __modelName?: string;
   __timestampMs?: number;
+  __sourceRaw?: string;
 }
 
 export interface UsageDetailWithEndpoint extends UsageDetail {
@@ -497,14 +499,22 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
         const timestamp = detailRaw.timestamp;
         const timestampMs = Date.parse(timestamp);
         const tokensRaw = isRecord(detailRaw.tokens) ? detailRaw.tokens : {};
+        const sourceRaw =
+          typeof detailRaw.source === 'string'
+            ? detailRaw.source.trim()
+            : detailRaw.source === null || detailRaw.source === undefined
+              ? ''
+              : String(detailRaw.source).trim();
         details.push({
           timestamp,
-          source: normalizeSource(detailRaw.source),
+          source: normalizeSource(sourceRaw),
           auth_index: detailRaw.auth_index as unknown as number,
+          request_id: typeof detailRaw.request_id === 'string' ? detailRaw.request_id : undefined,
           tokens: tokensRaw as unknown as UsageDetail['tokens'],
           failed: detailRaw.failed === true,
           __modelName: modelName,
           __timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
+          __sourceRaw: sourceRaw,
         });
       });
     });
@@ -568,10 +578,17 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
         const timestamp = detailRaw.timestamp;
         const timestampMs = Date.parse(timestamp);
         const tokensRaw = isRecord(detailRaw.tokens) ? detailRaw.tokens : {};
+        const sourceRaw =
+          typeof detailRaw.source === 'string'
+            ? detailRaw.source.trim()
+            : detailRaw.source === null || detailRaw.source === undefined
+              ? ''
+              : String(detailRaw.source).trim();
         details.push({
           timestamp,
-          source: normalizeSource(detailRaw.source),
+          source: normalizeSource(sourceRaw),
           auth_index: detailRaw.auth_index as unknown as number,
+          request_id: typeof detailRaw.request_id === 'string' ? detailRaw.request_id : undefined,
           tokens: tokensRaw as unknown as UsageDetail['tokens'],
           failed: detailRaw.failed === true,
           __modelName: modelName,
@@ -579,6 +596,7 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
           __endpointMethod: endpointMethod,
           __endpointPath: endpointPath,
           __timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
+          __sourceRaw: sourceRaw,
         });
       });
     });

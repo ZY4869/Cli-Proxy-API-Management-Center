@@ -203,7 +203,7 @@ export function createDisableState(
 /**
  * 时间范围类型
  */
-export type TimeRangeValue = number | 'custom';
+export type TimeRangeValue = number | '24h' | 'custom';
 
 /**
  * 根据时间范围过滤数据
@@ -227,6 +227,8 @@ export function filterDataByTimeRange(
   if (timeRange === 'custom' && customRange) {
     cutoffStart = customRange.start;
     cutoffEnd = customRange.end;
+  } else if (timeRange === '24h') {
+    cutoffStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   } else if (typeof timeRange === 'number') {
     cutoffStart = new Date(now.getTime() - timeRange * 24 * 60 * 60 * 1000);
     cutoffStart.setHours(0, 0, 0, 0);

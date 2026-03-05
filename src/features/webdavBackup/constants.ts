@@ -1,3 +1,4 @@
+import { MODEL_PRICING_STORAGE_KEYS } from '../billing/modelPricing/storage';
 import type { AutoBackupInterval } from './types';
 
 export const WEBDAV_STORE_KEY = 'cli-proxy-webdav';
@@ -9,13 +10,18 @@ export const DEFAULT_BASE_PATH = '/cpamc-backups/';
 
 export const BACKUP_ENCRYPTION_SALT = 'cpamc-webdav-backup::portable-key';
 
-/** localStorage 中需要备份的 key 列表 */
+const BILLING_LOCALSTORAGE_KEYS = [
+  ...MODEL_PRICING_STORAGE_KEYS,
+  'cli-proxy-model-pricing-default-currency-v1',
+  'cli-proxy-model-pricing-selected-currency-v1',
+];
+
 export const BACKUP_LOCALSTORAGE_KEYS = [
   'cli-proxy-theme',
   'cli-proxy-language',
   'cli-proxy-sidebar-collapsed',
   'cli-proxy-auth-files-page-size',
-  'model-prices',
+  ...BILLING_LOCALSTORAGE_KEYS,
   'disabled-models-store',
 ];
 

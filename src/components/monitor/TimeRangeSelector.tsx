@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import styles from '@/pages/MonitorPage.module.scss';
 
-export type TimeRange = 1 | 7 | 14 | 30 | 'custom';
+export type TimeRange = 1 | 7 | 14 | 30 | '24h' | 'custom';
 
 interface DateRange {
   start: Date;
@@ -14,6 +14,8 @@ interface TimeRangeSelectorProps {
   onChange: (range: TimeRange, customRange?: DateRange) => void;
   customRange?: DateRange;
 }
+
+const TIME_RANGES: TimeRange[] = [1, '24h', 7, 14, 30, 'custom'];
 
 export function TimeRangeSelector({ value, onChange, customRange }: TimeRangeSelectorProps) {
   const { t } = useTranslation();
@@ -33,43 +35,42 @@ export function TimeRangeSelector({ value, onChange, customRange }: TimeRangeSel
     return formatDateForInput(new Date());
   });
 
-  const handleTimeClick = useCallback((range: TimeRange) => {
-    if (range === 'custom') {
-      setShowCustom(true);
-      onChange(range);
-    } else {
+  const handleTimeClick = useCallback(
+    (range: TimeRange) => {
+      if (range === 'custom') {
+        setShowCustom(true);
+        onChange(range);
+        return;
+      }
       setShowCustom(false);
       onChange(range);
-    }
-  }, [onChange]);
+    },
+    [onChange]
+  );
 
   const handleApplyCustom = useCallback(() => {
-    if (startDate && endDate) {
-      const start = new Date(startDate);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
+    if (!startDate || !endDate) return;
 
-      if (start <= end) {
-        onChange('custom', { start, end });
-      }
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+
+    if (start <= end) {
+      onChange('custom', { start, end });
     }
-  }, [startDate, endDate, onChange]);
+  }, [endDate, onChange, startDate]);
 
   return (
     <div className={styles.timeRangeSelector}>
       <div className={styles.timeButtons}>
-        {([1, 7, 14, 30, 'custom'] as TimeRange[]).map((range) => (
+        {TIME_RANGES.map((range) => (
           <button
             key={range}
             className={`${styles.timeButton} ${value === range ? styles.active : ''}`}
             onClick={() => handleTimeClick(range)}
           >
-            {range === 1
-              ? t('monitor.time.today')
-              : range === 'custom'
-              ? t('monitor.time.custom')
-              : t('monitor.time.last_n_days', { n: range })}
+            {formatRangeLabel(range, t)}
           </button>
         ))}
       </div>
@@ -104,7 +105,19 @@ function formatDateForInput(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-// 根据时间范围过滤数据的工具函数
+function formatDateForDisplay(date: Date): string {
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  return `${month}/${day}`;
+}
+
+function formatRangeLabel(range: TimeRange, t: (key: string, options?: Record<string, unknown>) => string): string {
+  if (range === 1) return t('monitor.time.today');
+  if (range === '24h') return t('usage_stats.range_24h');
+  if (range === 'custom') return t('monitor.time.custom');
+  return t('monitor.time.last_n_days', { n: range });
+}
+
 export function filterByTimeRange<T extends { timestamp?: string }>(
   items: T[],
   range: TimeRange,
@@ -112,19 +125,21 @@ export function filterByTimeRange<T extends { timestamp?: string }>(
 ): T[] {
   const now = new Date();
   let cutoffStart: Date;
-  let cutoffEnd: Date = new Date(now.getTime());
-  cutoffEnd.setHours(23, 59, 59, 999);
+  let cutoffEnd = new Date(now.getTime());
 
   if (range === 'custom' && customRange) {
     cutoffStart = customRange.start;
     cutoffEnd = customRange.end;
+  } else if (range === '24h') {
+    cutoffStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   } else if (typeof range === 'number') {
     cutoffStart = new Date(now.getTime() - range * 24 * 60 * 60 * 1000);
     cutoffStart.setHours(0, 0, 0, 0);
+    cutoffEnd.setHours(23, 59, 59, 999);
   } else {
-    // 默认7天
     cutoffStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     cutoffStart.setHours(0, 0, 0, 0);
+    cutoffEnd.setHours(23, 59, 59, 999);
   }
 
   return items.filter((item) => {
@@ -134,11 +149,10 @@ export function filterByTimeRange<T extends { timestamp?: string }>(
   });
 }
 
-// 格式化时间范围显示
 export function formatTimeRangeCaption(
   range: TimeRange,
   customRange?: DateRange,
-  t?: (key: string, options?: any) => string
+  t?: (key: string, options?: Record<string, unknown>) => string
 ): string {
   if (range === 'custom' && customRange) {
     const startStr = formatDateForDisplay(customRange.start);
@@ -146,13 +160,10 @@ export function formatTimeRangeCaption(
     return `${startStr} - ${endStr}`;
   }
   if (range === 1) {
-    return t ? t('monitor.time.today') : '今天';
+    return t ? t('monitor.time.today') : 'Today';
   }
-  return t ? t('monitor.time.last_n_days', { n: range }) : `最近 ${range} 天`;
-}
-
-function formatDateForDisplay(date: Date): string {
-  const month = date.getMonth() + 1;
-  const day = date.getDate();
-  return `${month}/${day}`;
+  if (range === '24h') {
+    return t ? t('usage_stats.range_24h') : 'Last 24 Hours';
+  }
+  return t ? t('monitor.time.last_n_days', { n: range }) : `Last ${range} days`;
 }

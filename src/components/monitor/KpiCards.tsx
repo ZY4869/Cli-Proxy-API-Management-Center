@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { UsageData } from '@/pages/MonitorPage';
+import { extractTotalTokens } from '@/utils/usage';
 import styles from '@/pages/MonitorPage.module.scss';
 
 interface KpiCardsProps {
@@ -67,11 +68,11 @@ export function KpiCards({ data, loading, timeRange }: KpiCardsProps) {
             successRequests++;
           }
 
-          totalTokens += detail.tokens.total_tokens || 0;
+          totalTokens += extractTotalTokens(detail);
           inputTokens += detail.tokens.input_tokens || 0;
           outputTokens += detail.tokens.output_tokens || 0;
           reasoningTokens += detail.tokens.reasoning_tokens || 0;
-          cachedTokens += detail.tokens.cached_tokens || 0;
+          cachedTokens += Math.max(Number(detail.tokens.cached_tokens) || 0, Number((detail.tokens as { cache_tokens?: number }).cache_tokens) || 0);
 
           timestamps.push(new Date(detail.timestamp).getTime());
         });

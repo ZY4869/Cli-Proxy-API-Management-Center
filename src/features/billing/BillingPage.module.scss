@@ -753,11 +753,13 @@
 
 .requestCell {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .requestMain {
+  display: inline-flex;
   font-variant-numeric: tabular-nums;
   font-weight: 800;
   color: var(--text-primary);
@@ -766,6 +768,13 @@
 .requestPills {
   display: flex;
   flex-wrap: wrap;
+  gap: 6px;
+}
+
+.valuePills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
 }
 
@@ -784,6 +793,22 @@
   white-space: nowrap;
 }
 
+.pillNeutral {
+  color: var(--text-primary);
+}
+
+.pillMuted {
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+.pillWarning {
+  color: var(--warning-color, #f59e0b);
+  border-color: rgba($warning-color, 0.28);
+  background: rgba($warning-color, 0.12);
+}
+
 .pillSuccess {
   color: var(--success-color, #22c55e);
   border-color: rgba($success-color, 0.28);
@@ -794,6 +819,34 @@
   color: var(--danger-color, #ef4444);
   border-color: rgba($error-color, 0.28);
   background: rgba($error-color, 0.12);
+}
+
+.pillPrompt {
+  border-color: rgba(59, 130, 246, 0.28);
+  background: rgba(59, 130, 246, 0.12);
+  color: rgba(59, 130, 246, 0.95);
+  font-family: $font-mono;
+}
+
+.pillCompletion {
+  border-color: rgba(139, 92, 246, 0.28);
+  background: rgba(139, 92, 246, 0.12);
+  color: rgba(139, 92, 246, 0.95);
+  font-family: $font-mono;
+}
+
+.pillCache {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(245, 158, 11, 0.12);
+  color: rgba(245, 158, 11, 0.95);
+  font-family: $font-mono;
+}
+
+.pillTotal {
+  color: var(--primary-color);
+  border-color: rgba($primary-color, 0.28);
+  background: rgba($primary-color, 0.12);
+  font-family: $font-mono;
 }
 
 .legendList {

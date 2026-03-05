@@ -19,3 +19,21 @@ export type ModelPricingExportV1 = {
   models: Record<string, ModelPricingV1>;
 };
 
+export type ModelPricingTemplateDraftV2 = {
+  currencySymbol: CurrencySymbol;
+  cachePer1M?: number | string;
+  tiers: Array<{
+    maxPromptTokens: number | null;
+    promptPer1M: number | string;
+    completionPer1M: number | string;
+    label?: string;
+  }>;
+};
+
+export type ModelPricingExportV2 = {
+  version: 2;
+  exportedAt: string; // ISO string
+  template?: boolean;
+  instructions?: string;
+  models: Record<string, ModelPricingV1 | ModelPricingTemplateDraftV2 | null>;
+};

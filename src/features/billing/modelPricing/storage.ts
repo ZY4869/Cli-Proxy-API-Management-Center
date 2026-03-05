@@ -1,8 +1,14 @@
 import type { ModelPricingV1 } from './types';
 import { parseModelPricingV1 } from './schema';
 
-const MODEL_PRICING_STORAGE_KEY = 'cli-proxy-model-pricing-v1';
-const LEGACY_MODEL_PRICE_STORAGE_KEY = 'cli-proxy-model-prices-v2';
+export const MODEL_PRICING_STORAGE_KEY = 'cli-proxy-model-pricing-v1';
+export const LEGACY_MODEL_PRICE_STORAGE_KEY = 'cli-proxy-model-prices-v2';
+export const EARLY_MODEL_PRICE_STORAGE_KEY = 'model-prices';
+export const MODEL_PRICING_STORAGE_KEYS = [
+  MODEL_PRICING_STORAGE_KEY,
+  LEGACY_MODEL_PRICE_STORAGE_KEY,
+  EARLY_MODEL_PRICE_STORAGE_KEY,
+] as const;
 
 type LegacyModelPrice = { prompt: number; completion: number; cache: number };
 
@@ -79,6 +85,24 @@ const readJson = (key: string): unknown => {
   }
 };
 
+const readPricingMap = (key: string): Record<string, ModelPricingV1> => {
+  const parsed = readJson(key);
+  if (!isRecord(parsed)) return {};
+
+  const normalized: Record<string, ModelPricingV1> = {};
+  Object.entries(parsed).forEach(([modelName, pricingRaw]) => {
+    const name = String(modelName ?? '').trim();
+    if (!name) return;
+    try {
+      normalized[name] = parseModelPricingV1(pricingRaw);
+    } catch {
+      // ignore invalid model pricing entries
+    }
+  });
+
+  return normalized;
+};
+
 const safeWriteJson = (key: string, value: unknown): void => {
   try {
     if (typeof localStorage === 'undefined') return;
@@ -94,35 +118,25 @@ export function saveModelPricingMap(map: Record<string, ModelPricingV1>): void {
 
 export function loadModelPricingMap(): Record<string, ModelPricingV1> {
   try {
-    const parsed = readJson(MODEL_PRICING_STORAGE_KEY);
-    if (isRecord(parsed)) {
-      const normalized: Record<string, ModelPricingV1> = {};
-      Object.entries(parsed).forEach(([modelName, pricingRaw]) => {
-        const name = String(modelName ?? '').trim();
-        if (!name) return;
-        try {
-          normalized[name] = parseModelPricingV1(pricingRaw);
-        } catch {
-          // ignore invalid model pricing entries
-        }
-      });
-      if (Object.keys(normalized).length > 0) {
-        return normalized;
+    const current = readPricingMap(MODEL_PRICING_STORAGE_KEY);
+    if (Object.keys(current).length > 0) {
+      return current;
+    }
+
+    for (const key of [LEGACY_MODEL_PRICE_STORAGE_KEY, EARLY_MODEL_PRICE_STORAGE_KEY]) {
+      const legacyParsed = readJson(key);
+      const legacy = parseLegacyModelPrices(legacyParsed);
+      if (Object.keys(legacy).length <= 0) {
+        continue;
       }
+
+      const migrated = migrateLegacyModelPricesToPricingMap(legacy);
+      saveModelPricingMap(migrated);
+      return migrated;
     }
 
-    // Migration: only run when new storage is empty.
-    const legacyParsed = readJson(LEGACY_MODEL_PRICE_STORAGE_KEY);
-    const legacy = parseLegacyModelPrices(legacyParsed);
-    if (Object.keys(legacy).length <= 0) {
-      return {};
-    }
-
-    const migrated = migrateLegacyModelPricesToPricingMap(legacy);
-    saveModelPricingMap(migrated);
-    return migrated;
+    return {};
   } catch {
     return {};
   }
 }
-

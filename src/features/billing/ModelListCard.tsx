@@ -6,7 +6,7 @@ import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { formatCompactNumber } from '@/utils/usage';
 import type { ModelAggregate } from './modelPricing/analyticsTypes';
 import { sumAllCurrencies } from './modelPricing/analyticsUtils';
-import type { CurrencySymbol } from './modelPricing/types';
+import type { CurrencySymbol, ModelPricingV1 } from './modelPricing/types';
 import { formatMoney } from './modelPricing/money';
 import { useBillingCollapse } from './collapse/useBillingCollapse';
 import { CollapseToggleButton } from './collapse/CollapseToggleButton';
@@ -18,6 +18,7 @@ export type ModelListCardProps = {
   loading: boolean;
   models: ModelAggregate[];
   selectedCurrency: CurrencySymbol;
+  pricingByModel: Record<string, ModelPricingV1>;
 };
 
 const getCost = (model: ModelAggregate, currency: CurrencySymbol): number =>
@@ -29,22 +30,33 @@ const renderCostList = (costs: ModelAggregate['costs']) => {
     .sort((a, b) => (b[1].totalCost ?? 0) - (a[1].totalCost ?? 0) || a[0].localeCompare(b[0]));
   if (!entries.length) return '--';
   return (
-    <div>
+    <div className={billingStyles.valuePills}>
       {entries.map(([symbol, totals]) => (
-        <div key={symbol}>{formatMoney(symbol, totals.totalCost)}</div>
+        <span key={symbol} className={`${billingStyles.pill} ${billingStyles.pillTotal}`}>
+          {formatMoney(symbol, totals.totalCost)}
+        </span>
       ))}
     </div>
   );
 };
 
-const renderTierSummary = (model: ModelAggregate) => {
+const renderTierSummary = (model: ModelAggregate, pricing: ModelPricingV1 | undefined, flatLabel: string) => {
   const hits = model.tierHits ?? [];
   if (!hits.length) return '--';
-  const top = hits.slice(0, 2).map((hit) => `${hit.tierLabel}(${hit.requestCount})`);
+  const isFlatPricing = Array.isArray(pricing?.tiers) && pricing.tiers.length === 1;
+  const formatLabel = (label: string, maxPromptTokens: number | null) => {
+    if (!isFlatPricing) return label;
+    if (maxPromptTokens === null && label === '∞') return flatLabel;
+    return label;
+  };
+
+  const top = hits
+    .slice(0, 2)
+    .map((hit) => `${formatLabel(hit.tierLabel, hit.maxPromptTokens)}(${hit.requestCount})`);
   return hits.length > 2 ? `${top.join(' / ')} +${hits.length - 2}` : top.join(' / ');
 };
 
-export function ModelListCard({ loading, models, selectedCurrency }: ModelListCardProps) {
+export function ModelListCard({ loading, models, selectedCurrency, pricingByModel }: ModelListCardProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [onlyMissing, setOnlyMissing] = useState(false);
@@ -112,12 +124,17 @@ export function ModelListCard({ loading, models, selectedCurrency }: ModelListCa
                     {rows.map((m) => {
                       const tokens = m.inputTokens + m.outputBillableTokens;
                       const configured = m.missingPricingRequests <= 0;
+                      const tierSummary = renderTierSummary(m, pricingByModel?.[m.modelName], t('billing.pricing_flat'));
                       return (
                         <tr key={m.modelName}>
                           <td className={styles.modelCell}>{m.modelName}</td>
                           <td>
                             <div className={billingStyles.requestCell}>
-                              <div className={billingStyles.requestMain}>{m.requests.toLocaleString()}</div>
+                              <div className={billingStyles.requestMain}>
+                                <span className={`${billingStyles.pill} ${billingStyles.pillNeutral}`}>
+                                  {m.requests.toLocaleString()}
+                                </span>
+                              </div>
                               <div className={billingStyles.requestPills}>
                                 <span className={`${billingStyles.pill} ${billingStyles.pillSuccess}`}>
                                   {t('stats.success')}: {m.successCount.toLocaleString()}
@@ -128,9 +145,19 @@ export function ModelListCard({ loading, models, selectedCurrency }: ModelListCa
                               </div>
                             </div>
                           </td>
-                          <td>{formatCompactNumber(tokens)}</td>
+                          <td>
+                            <span className={`${billingStyles.pill} ${billingStyles.pillNeutral}`}>
+                              {formatCompactNumber(tokens)}
+                            </span>
+                          </td>
                           <td>{renderCostList(m.costs)}</td>
-                          <td>{renderTierSummary(m)}</td>
+                          <td>
+                            {tierSummary === '--' ? (
+                              '--'
+                            ) : (
+                              <span className={`${billingStyles.pill} ${billingStyles.pillNeutral}`}>{tierSummary}</span>
+                            )}
+                          </td>
                           <td>{configured ? t('billing.model_prices_configured') : t('billing.model_prices_missing')}</td>
                         </tr>
                       );

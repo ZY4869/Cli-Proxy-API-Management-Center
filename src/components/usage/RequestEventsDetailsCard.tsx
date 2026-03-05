@@ -10,10 +10,9 @@ import type { AuthFileItem } from '@/types/authFile';
 import type { CredentialInfo } from '@/types/sourceInfo';
 import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver';
 import {
-  collectUsageDetails,
-  extractTotalTokens,
   normalizeAuthIndex
 } from '@/utils/usage';
+import { collectUsageRequestEvents } from '@/utils/requestEvents';
 import { downloadBlob } from '@/utils/download';
 import styles from '@/pages/UsagePage.module.scss';
 
@@ -47,12 +46,6 @@ export interface RequestEventsDetailsCardProps {
   vertexConfigs: ProviderKeyConfig[];
   openaiProviders: OpenAIProviderConfig[];
 }
-
-const toNumber = (value: unknown): number => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return 0;
-  return parsed;
-};
 
 const encodeCsv = (value: string | number): string => {
   const text = String(value ?? '');
@@ -115,54 +108,36 @@ export function RequestEventsDetailsCard({
   );
 
   const rows = useMemo<RequestEventRow[]>(() => {
-    const details = collectUsageDetails(usage);
+    const events = collectUsageRequestEvents(usage);
 
-    return details
-      .map((detail, index) => {
-        const timestamp = detail.timestamp;
-        const timestampMs =
-          typeof detail.__timestampMs === 'number' && detail.__timestampMs > 0
-            ? detail.__timestampMs
-            : Date.parse(timestamp);
+    return events
+      .map((event) => {
+        const timestamp = event.timestamp;
+        const timestampMs = event.timestampMs;
         const date = Number.isNaN(timestampMs) ? null : new Date(timestampMs);
-        const sourceRaw = String(detail.source ?? '').trim();
-        const authIndexRaw = detail.auth_index as unknown;
-        const authIndex =
-          authIndexRaw === null || authIndexRaw === undefined || authIndexRaw === ''
-            ? '-'
-            : String(authIndexRaw);
-        const sourceInfo = resolveSourceDisplay(sourceRaw, authIndexRaw, sourceInfoMap, authFileMap);
+        const sourceRaw = event.sourceRaw || event.source;
+        const authIndexRaw = event.authIndexRaw;
+        const authIndex = event.authIndex;
+        const sourceInfo = resolveSourceDisplay(event.source, authIndexRaw, sourceInfoMap, authFileMap);
         const source = sourceInfo.displayName;
         const sourceType = sourceInfo.type;
-        const model = String(detail.__modelName ?? '').trim() || '-';
-        const inputTokens = Math.max(toNumber(detail.tokens?.input_tokens), 0);
-        const outputTokens = Math.max(toNumber(detail.tokens?.output_tokens), 0);
-        const reasoningTokens = Math.max(toNumber(detail.tokens?.reasoning_tokens), 0);
-        const cachedTokens = Math.max(
-          Math.max(toNumber(detail.tokens?.cached_tokens), 0),
-          Math.max(toNumber(detail.tokens?.cache_tokens), 0)
-        );
-        const totalTokens = Math.max(
-          toNumber(detail.tokens?.total_tokens),
-          extractTotalTokens(detail)
-        );
 
         return {
-          id: `${timestamp}-${model}-${sourceRaw || source}-${authIndex}-${index}`,
+          id: event.id,
           timestamp,
           timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
           timestampLabel: date ? date.toLocaleString(i18n.language) : timestamp || '-',
-          model,
+          model: event.model,
           sourceRaw: sourceRaw || '-',
           source,
           sourceType,
           authIndex,
-          failed: detail.failed === true,
-          inputTokens,
-          outputTokens,
-          reasoningTokens,
-          cachedTokens,
-          totalTokens
+          failed: event.failed,
+          inputTokens: event.inputTokens,
+          outputTokens: event.outputTokens,
+          reasoningTokens: event.reasoningTokens,
+          cachedTokens: event.cachedTokens,
+          totalTokens: event.totalTokens
         };
       })
       .sort((a, b) => b.timestampMs - a.timestampMs);
@@ -321,6 +296,9 @@ export function RequestEventsDetailsCard({
   return (
     <Card
       title={t('usage_stats.request_events_title')}
+      subtitle={t('usage_stats.request_events_scope_notice', {
+        defaultValue: '来自 /usage 明细快照，Token 统计口径已与计费明细对齐。'
+      })}
       extra={
         <div className={styles.requestEventsActions}>
           <Button

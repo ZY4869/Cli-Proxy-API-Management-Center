@@ -450,6 +450,7 @@ export function LogsPage() {
   return (
     <div className={styles.container}>
       <h1 className={styles.pageTitle}>{t('logs.title')}</h1>
+      <p className={styles.scopeNotice}>{t('logs.scope_notice')}</p>
 
       <div className={styles.tabBar}>
         <button

@@ -18,8 +18,8 @@ import {
 import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
-import { useThemeStore } from '@/stores';
-import { usageApi, providersApi, authFilesApi } from '@/services/api';
+import { useThemeStore, useUsageStatsStore, USAGE_STATS_STALE_TIME_MS } from '@/stores';
+import { providersApi, authFilesApi } from '@/services/api';
 import { buildSourceInfoMap } from '@/utils/sourceResolver';
 import { normalizeAuthIndex } from '@/utils/usage';
 import type { CredentialInfo } from '@/types/sourceInfo';
@@ -80,9 +80,10 @@ export function MonitorPage() {
   const isDark = resolvedTheme === 'dark';
 
   // 状态
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [usageData, setUsageData] = useState<UsageData | null>(null);
+  const usageData = useUsageStatsStore((state) => state.usage) as UsageData | null;
+  const loading = useUsageStatsStore((state) => state.loading);
+  const error = useUsageStatsStore((state) => state.error);
+  const loadUsageStats = useUsageStatsStore((state) => state.loadUsageStats);
   const [timeRange, setTimeRange] = useState<TimeRange>(7);
   const [apiFilter, setApiFilter] = useState('');
   const [providerMap, setProviderMap] = useState<Record<string, string>>({});
@@ -231,32 +232,25 @@ export function MonitorPage() {
   }, []);
 
   // 加载数据
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    // 渠道映射并行加载，但不阻塞主数据展示
-    loadProviderMap();
+  const loadData = useCallback(async (force = true) => {
+    void loadProviderMap();
     try {
-      const response = await usageApi.getUsage();
-      // API 返回的数据可能在 response.usage 或直接在 response 中
-      const data = response?.usage ?? response;
-      setUsageData(data as UsageData);
+      await loadUsageStats({ force, staleTimeMs: USAGE_STATS_STALE_TIME_MS });
     } catch (err) {
-      const message = err instanceof Error ? err.message : t('common.unknown_error');
       console.error('Monitor: Error loading data:', err);
-      setError(message);
-    } finally {
-      setLoading(false);
     }
-  }, [t, loadProviderMap]);
+  }, [loadProviderMap, loadUsageStats]);
 
-  // 初始加载
+  const handleRefresh = useCallback(() => loadData(true), [loadData]);
+
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    void loadProviderMap();
+    void loadUsageStats({ staleTimeMs: USAGE_STATS_STALE_TIME_MS }).catch((err) => {
+      console.error('Monitor: Error loading data:', err);
+    });
+  }, [loadProviderMap, loadUsageStats]);
 
-  // 响应头部刷新
-  useHeaderRefresh(loadData);
+  useHeaderRefresh(handleRefresh);
 
   // 根据时间范围过滤数据
   const filteredData = useMemo(() => {
@@ -313,7 +307,7 @@ export function MonitorPage() {
 
   // 处理 API 过滤应用（触发数据刷新）
   const handleApiFilterApply = () => {
-    loadData();
+    void handleRefresh();
   };
 
   return (
@@ -334,7 +328,7 @@ export function MonitorPage() {
           <Button
             variant="secondary"
             size="sm"
-            onClick={loadData}
+            onClick={() => void handleRefresh()}
             disabled={loading}
           >
             {loading ? t('common.loading') : t('common.refresh')}
@@ -397,13 +391,14 @@ export function MonitorPage() {
 
       {/* 请求日志 */}
       <RequestLogs
-        data={filteredData}
+        data={usageData}
         loading={loading}
         providerMap={providerMap}
         providerTypeMap={providerTypeMap}
         sourceInfoMap={sourceInfoMap}
         authFileMap={authFileMap}
         apiFilter={apiFilter}
+        onRefresh={() => void handleRefresh()}
       />
     </div>
   );

@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNotificationStore, useAuthStore } from '@/stores';
 import { configApi, usageApi } from '@/services/api';
+import { useModelPricingStore } from '@/features/billing/modelPricing/useModelPricingStore';
 import { webdavClient } from '../client/webdavClient';
 import { useWebdavStore } from '../store/useWebdavStore';
 import type { BackupPayload, BackupData, BackupScope, WebdavFileInfo } from '../types';
@@ -95,7 +96,7 @@ export function useBackupActions() {
       setLastBackupTime(now);
       showNotification(t('backup.backup_success'), 'success');
 
-      // 自动清理：超出最大备份数时删除最旧的文件
+      // Auto cleanup: delete oldest backups when over the limit
       if (maxBackupCount > 0) {
         try {
           const files = await webdavClient.listDirectory(connection);
@@ -279,7 +280,7 @@ export function useBackupActions() {
 }
 
 /**
- * 从 payload 中提取 data：v2 加密格式需要解密，v1 旧格式直接使用
+ * Extract data from payload: decrypt v2 payloads, use v1 payloads directly
  */
 function extractData(payload: BackupPayload): BackupData {
   if (typeof payload.data === 'string') {
@@ -296,6 +297,7 @@ async function applyRestore(payload: BackupPayload, scope: BackupScope): Promise
     for (const [key, val] of Object.entries(data.localStorage)) {
       localStorage.setItem(key, val);
     }
+    useModelPricingStore.getState().reload();
   }
 
   if (scope.usage && data.usage) {
@@ -306,5 +308,6 @@ async function applyRestore(payload: BackupPayload, scope: BackupScope): Promise
     }
   }
 
-  // config 只提供查看，不自动写入后端
+  // Config backups remain view-only and are not written back automatically
 }
+

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Chart } from 'react-chartjs-2';
 import type { UsageData } from '@/pages/MonitorPage';
+import { extractTotalTokens } from '@/utils/usage';
 import styles from '@/pages/MonitorPage.module.scss';
 
 interface HourlyTokenChartProps {
@@ -62,11 +63,11 @@ export function HourlyTokenChart({ data, loading, isDark }: HourlyTokenChartProp
           if (!hourlyStats[hourKey]) {
             hourlyStats[hourKey] = { total: 0, input: 0, output: 0, reasoning: 0, cached: 0 };
           }
-          hourlyStats[hourKey].total += detail.tokens.total_tokens || 0;
+          hourlyStats[hourKey].total += extractTotalTokens(detail);
           hourlyStats[hourKey].input += detail.tokens.input_tokens || 0;
           hourlyStats[hourKey].output += detail.tokens.output_tokens || 0;
           hourlyStats[hourKey].reasoning += detail.tokens.reasoning_tokens || 0;
-          hourlyStats[hourKey].cached += detail.tokens.cached_tokens || 0;
+          hourlyStats[hourKey].cached += Math.max(Number(detail.tokens.cached_tokens) || 0, Number((detail.tokens as { cache_tokens?: number }).cache_tokens) || 0);
         });
       });
     });

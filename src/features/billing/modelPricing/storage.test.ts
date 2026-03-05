@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { loadModelPricingMap } from './storage';
+import {
+  EARLY_MODEL_PRICE_STORAGE_KEY,
+  LEGACY_MODEL_PRICE_STORAGE_KEY,
+  MODEL_PRICING_STORAGE_KEY,
+  loadModelPricingMap,
+  saveModelPricingMap,
+} from './storage';
 
 type LocalStorageLike = {
   getItem: (key: string) => string | null;
@@ -8,7 +14,7 @@ type LocalStorageLike = {
   clear: () => void;
 };
 
-const createMemoryLocalStorage = (): LocalStorageLike & { _dump: () => Record<string, string> } => {
+const createMemoryLocalStorage = (): LocalStorageLike & { dump: () => Record<string, string> } => {
   const store = new Map<string, string>();
   return {
     getItem: (key) => store.get(key) ?? null,
@@ -21,7 +27,7 @@ const createMemoryLocalStorage = (): LocalStorageLike & { _dump: () => Record<st
     clear: () => {
       store.clear();
     },
-    _dump: () => Object.fromEntries(store.entries()),
+    dump: () => Object.fromEntries(store.entries()),
   };
 };
 
@@ -30,13 +36,30 @@ describe('model pricing storage', () => {
 
   beforeEach(() => {
     memory.clear();
-    (globalThis as any).localStorage = memory;
+    (globalThis as { localStorage?: LocalStorageLike }).localStorage = memory;
   });
 
-  it('migrates legacy model prices into model pricing map', () => {
-    const legacyKey = 'cli-proxy-model-prices-v2';
+  it('loads existing current-format pricing directly', () => {
     memory.setItem(
-      legacyKey,
+      MODEL_PRICING_STORAGE_KEY,
+      JSON.stringify({
+        'gpt-b': {
+          currencySymbol: '$',
+          cachePer1M: 1,
+          tiers: [{ maxPromptTokens: null, promptPer1M: 10, completionPer1M: 3 }],
+        },
+      })
+    );
+
+    const loaded = loadModelPricingMap();
+    expect(loaded['gpt-b']?.currencySymbol).toBe('$');
+    expect(loaded['gpt-b']?.cachePer1M).toBe(1);
+    expect(loaded['gpt-b']?.tiers?.[0]?.promptPer1M).toBe(10);
+  });
+
+  it('migrates legacy v2 pricing into current storage', () => {
+    memory.setItem(
+      LEGACY_MODEL_PRICE_STORAGE_KEY,
       JSON.stringify({
         'gpt-a': { prompt: 2, completion: 4, cache: 2 },
       })
@@ -44,28 +67,38 @@ describe('model pricing storage', () => {
 
     const loaded = loadModelPricingMap();
     expect(loaded['gpt-a']?.currencySymbol).toBe('$');
-    expect(loaded['gpt-a']?.tiers?.length).toBe(1);
     expect(loaded['gpt-a']?.tiers?.[0]?.maxPromptTokens).toBeNull();
-    expect(loaded['gpt-a']?.cachePer1M).toBeUndefined();
+    expect(memory.dump()[MODEL_PRICING_STORAGE_KEY]).toBeTruthy();
   });
 
-  it('loads existing model pricing without requiring legacy', () => {
-    const key = 'cli-proxy-model-pricing-v1';
+  it('migrates very old backup pricing key into current storage', () => {
     memory.setItem(
-      key,
+      EARLY_MODEL_PRICE_STORAGE_KEY,
       JSON.stringify({
-        'gpt-b': {
-          currencySymbol: '￥',
-          cachePer1M: 1,
-          tiers: [{ maxPromptTokens: null, promptPer1M: 10, completionPer1M: 0 }],
-        },
+        'gpt-c': { prompt: 1, completion: 2, cache: 0.5 },
       })
     );
 
     const loaded = loadModelPricingMap();
-    expect(loaded['gpt-b']?.currencySymbol).toBe('￥');
-    expect(loaded['gpt-b']?.cachePer1M).toBe(1);
-    expect(loaded['gpt-b']?.tiers?.[0]?.promptPer1M).toBe(10);
+    expect(loaded['gpt-c']?.tiers?.[0]?.promptPer1M).toBe(1);
+    expect(loaded['gpt-c']?.tiers?.[0]?.completionPer1M).toBe(2);
+    expect(loaded['gpt-c']?.cachePer1M).toBe(0.5);
+    expect(memory.dump()[MODEL_PRICING_STORAGE_KEY]).toBeTruthy();
+  });
+
+  it('saves current-format pricing to the stable key', () => {
+    saveModelPricingMap({
+      'gpt-d': {
+        currencySymbol: '$',
+        tiers: [{ maxPromptTokens: null, promptPer1M: 8, completionPer1M: 16 }],
+      },
+    });
+
+    const stored = memory.dump();
+    expect(JSON.parse(stored[MODEL_PRICING_STORAGE_KEY] ?? '{}')).toMatchObject({
+      'gpt-d': {
+        currencySymbol: '$',
+      },
+    });
   });
 });
-

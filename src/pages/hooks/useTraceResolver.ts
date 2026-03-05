@@ -185,33 +185,43 @@ export function useTraceResolver(options: UseTraceResolverOptions): UseTraceReso
     const logTimestampMs = traceLogLine.timestamp
       ? Date.parse(traceLogLine.timestamp)
       : Number.NaN;
+    const logModel = extractModelFromMessage(traceLogLine.message);
+    const logRequestId = traceLogLine.requestId?.trim();
 
-    // Step 1: filter by path match
+    const toCandidate = (detail: UsageDetailWithEndpoint, modelMatched: boolean): TraceCandidate => {
+      const timeDeltaMs =
+        !Number.isNaN(logTimestampMs) && detail.__timestampMs > 0
+          ? Math.abs(logTimestampMs - detail.__timestampMs)
+          : null;
+      return { detail, modelMatched, timeDeltaMs };
+    };
+
+    const requestIdMatched = logRequestId
+      ? traceUsageDetails.filter((detail) => detail.request_id === logRequestId)
+      : [];
+    if (requestIdMatched.length > 0) {
+      return requestIdMatched
+        .map((detail) => toCandidate(detail, true))
+        .sort((a, b) => (b.detail.__timestampMs || 0) - (a.detail.__timestampMs || 0))
+        .slice(0, TRACE_MAX_CANDIDATES);
+    }
+
     const pathMatched = traceUsageDetails.filter((detail) =>
       isPathMatch(logPath, normalizeTracePath(detail.__endpointPath))
     );
     if (pathMatched.length === 0) return [];
 
-    // Step 2: try to extract model from log message, then filter by model
-    const logModel = extractModelFromMessage(traceLogLine.message);
     const modelMatched = logModel
       ? pathMatched.filter(
-          (d) => d.__modelName?.toLowerCase() === logModel.toLowerCase()
+          (detail) => detail.__modelName?.toLowerCase() === logModel.toLowerCase()
         )
       : [];
 
-    // Step 3: prefer model-matched set; fall back to path-matched
-    const useModelSet = modelMatched.length > 0;
-    const source = useModelSet ? modelMatched : pathMatched;
+    const preferredMatches = modelMatched.length > 0 ? modelMatched : pathMatched;
+    const didModelMatch = modelMatched.length > 0;
 
-    return source
-      .map((detail) => {
-        const timeDeltaMs =
-          !Number.isNaN(logTimestampMs) && detail.__timestampMs > 0
-            ? Math.abs(logTimestampMs - detail.__timestampMs)
-            : null;
-        return { detail, modelMatched: useModelSet, timeDeltaMs } satisfies TraceCandidate;
-      })
+    return preferredMatches
+      .map((detail) => toCandidate(detail, didModelMatch))
       .sort((a, b) => (b.detail.__timestampMs || 0) - (a.detail.__timestampMs || 0))
       .slice(0, TRACE_MAX_CANDIDATES);
   }, [traceLogLine, traceUsageDetails]);
