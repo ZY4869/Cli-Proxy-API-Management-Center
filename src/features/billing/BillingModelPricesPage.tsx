@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SecondaryScreenShell } from '@/components/common/SecondaryScreenShell';
@@ -34,11 +34,13 @@ export function BillingModelPricesPage() {
 
   const [query, setQuery] = useState('');
   const [onlyMissing, setOnlyMissing] = useState(false);
-  const editModel = (() => {
+  const [editModel, setEditModel] = useState<string | null>(null);
+
+  useEffect(() => {
     const raw = searchParams.get('model');
     const name = String(raw ?? '').trim();
-    return name ? name : null;
-  })();
+    setEditModel(name ? name : null);
+  }, [searchParams]);
 
   const rows = useMemo((): ModelRow[] => {
     const q = query.trim().toLowerCase();
@@ -84,6 +86,7 @@ export function BillingModelPricesPage() {
     (modelName: string) => {
       const name = String(modelName ?? '').trim();
       if (!name) return;
+      setEditModel(name);
       const next = new URLSearchParams(searchParams);
       next.set('model', name);
       setSearchParams(next);
@@ -92,6 +95,7 @@ export function BillingModelPricesPage() {
   );
 
   const closeEdit = useCallback(() => {
+    setEditModel(null);
     if (!searchParams.get('model')) return;
     const next = new URLSearchParams(searchParams);
     next.delete('model');

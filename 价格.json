@@ -1,0 +1,325 @@
+{
+"version": 2,
+"exportedAt": "2026-03-05T13:03:54.297Z",
+"template": true,
+"instructions": "Fill TODO with numbers (supports numeric strings). Keep one Infinity tier (maxPromptTokens = null). Delete entries you do not want to import.\n缺少可靠信息的模型（已设为 null）：gemini-flash-latest, gemini-flash-lite-latest, gemini-pro-latest, gpt-5-codex-mini, gpt-5.3-codex-spark, gpt-oss-120b-medium。\n定价来源：OpenAI API Pricing ；Anthropic Claude Pricing ；Google Gemini Developer API Pricing ",
+"models": {
+"claude-opus-4-6-thinking": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": 200000,
+"promptPer1M": "5.0000",
+"completionPer1M": "25.0000"
+},
+{
+"maxPromptTokens": null,
+"promptPer1M": "10.0000",
+"completionPer1M": "37.5000"
+}
+]
+},
+"claude-sonnet-4-6": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": 200000,
+"promptPer1M": "3.0000",
+"completionPer1M": "15.0000"
+},
+{
+"maxPromptTokens": null,
+"promptPer1M": "6.0000",
+"completionPer1M": "22.5000"
+}
+]
+},
+"gemini-2.5-flash": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": null,
+"promptPer1M": "0.3000",
+"completionPer1M": "2.5000"
+}
+],
+"cachePer1M": "0.0300"
+},
+"gemini-2.5-flash-image": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": null,
+"promptPer1M": "0.3000",
+"completionPer1M": "30.0000"
+}
+]
+},
+"gemini-2.5-flash-lite": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": null,
+"promptPer1M": "0.1000",
+"completionPer1M": "0.4000"
+}
+],
+"cachePer1M": "0.0100"
+},
+"gemini-2.5-pro": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": 200000,
+"promptPer1M": "1.2500",
+"completionPer1M": "10.0000"
+},
+{
+"maxPromptTokens": null,
+"promptPer1M": "2.5000",
+"completionPer1M": "15.0000"
+}
+],
+"cachePer1M": "0.1250"
+},
+"gemini-3-flash": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": null,
+"promptPer1M": "0.5000",
+"completionPer1M": "3.0000"
+}
+],
+"cachePer1M": "0.0500"
+},
+"gemini-3-flash-preview": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": null,
+"promptPer1M": "0.5000",
+"completionPer1M": "3.0000"
+}
+],
+"cachePer1M": "0.0500"
+},
+"gemini-3-pro-high": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": 200000,
+"promptPer1M": "2.0000",
+"completionPer1M": "12.0000"
+},
+{
+"maxPromptTokens": null,
+"promptPer1M": "4.0000",
+"completionPer1M": "18.0000"
+}
+],
+"cachePer1M": "0.2000"
+},
+"gemini-3-pro-preview": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": 200000,
+"promptPer1M": "2.0000",
+"completionPer1M": "12.0000"
+},
+{
+"maxPromptTokens": null,
+"promptPer1M": "4.0000",
+"completionPer1M": "18.0000"
+}
+],
+"cachePer1M": "0.2000"
+},
+"gemini-3.1-flash-image": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": null,
+"promptPer1M": "0.5000",
+"completionPer1M": "60.0000"
+}
+]
+},
+"gemini-3.1-pro-high": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": 200000,
+"promptPer1M": "2.0000",
+"completionPer1M": "12.0000"
+},
+{
+"maxPromptTokens": null,
+"promptPer1M": "4.0000",
+"completionPer1M": "18.0000"
+}
+],
+"cachePer1M": "0.2000"
+},
+"gemini-3.1-pro-low": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": 200000,
+"promptPer1M": "1.0000",
+"completionPer1M": "6.0000"
+},
+{
+"maxPromptTokens": null,
+"promptPer1M": "2.0000",
+"completionPer1M": "9.0000"
+}
+],
+"cachePer1M": "0.2000"
+},
+"gemini-3.1-pro-preview": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": 200000,
+"promptPer1M": "2.0000",
+"completionPer1M": "12.0000"
+},
+{
+"maxPromptTokens": null,
+"promptPer1M": "4.0000",
+"completionPer1M": "18.0000"
+}
+],
+"cachePer1M": "0.2000"
+},
+"gemini-flash-latest": null,
+"gemini-flash-lite-latest": null,
+"gemini-pro-latest": null,
+"gpt-5": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": null,
+"promptPer1M": "1.2500",
+"completionPer1M": "10.0000"
+}
+],
+"cachePer1M": "0.1250"
+},
+"gpt-5-codex": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": null,
+"promptPer1M": "1.2500",
+"completionPer1M": "10.0000"
+}
+],
+"cachePer1M": "0.1250"
+},
+"gpt-5-codex-mini": null,
+"gpt-5.1": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": null,
+"promptPer1M": "1.2500",
+"completionPer1M": "10.0000"
+}
+],
+"cachePer1M": "0.1250"
+},
+"gpt-5.1-codex": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": null,
+"promptPer1M": "1.2500",
+"completionPer1M": "10.0000"
+}
+],
+"cachePer1M": "0.1250"
+},
+"gpt-5.1-codex-max": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": null,
+"promptPer1M": "1.2500",
+"completionPer1M": "10.0000"
+}
+],
+"cachePer1M": "0.1250"
+},
+"gpt-5.1-codex-mini": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": null,
+"promptPer1M": "0.2500",
+"completionPer1M": "2.0000"
+}
+],
+"cachePer1M": "0.0250"
+},
+"gpt-5.2": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": null,
+"promptPer1M": "1.7500",
+"completionPer1M": "14.0000"
+}
+],
+"cachePer1M": "0.1750"
+},
+"gpt-5.2-codex": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": null,
+"promptPer1M": "1.7500",
+"completionPer1M": "14.0000"
+}
+],
+"cachePer1M": "0.1750"
+},
+"gpt-5.3-codex": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": null,
+"promptPer1M": "1.7500",
+"completionPer1M": "14.0000"
+}
+],
+"cachePer1M": "0.1750"
+},
+"gpt-5.3-codex-spark": null,
+"gpt-oss-120b-medium": null,
+"tab_flash_lite_preview": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": null,
+"promptPer1M": "0.2500",
+"completionPer1M": "1.5000"
+}
+],
+"cachePer1M": "0.0250"
+},
+"tab_jump_flash_lite_preview": {
+"currencySymbol": "$",
+"tiers": [
+{
+"maxPromptTokens": null,
+"promptPer1M": "0.2500",
+"completionPer1M": "1.5000"
+}
+],
+"cachePer1M": "0.0250"
+}
+}
+}

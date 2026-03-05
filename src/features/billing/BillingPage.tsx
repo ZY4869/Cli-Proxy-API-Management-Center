@@ -18,8 +18,9 @@ import { ModelCostTrendCard } from './ModelCostTrendCard';
 import { TopBarChartCard } from './TopBarChartCard';
 import { ModelBillingFiltersBar } from './ModelBillingFiltersBar';
 import { ModelListCard } from './ModelListCard';
-import { EndpointAnalysisListCard } from './EndpointAnalysisListCard';
+import { TopEndpointsCard } from './TopEndpointsCard';
 import { BillingDetailsCard } from './BillingDetailsCard';
+import { useModelPriceModels } from './modelPrices/useModelPriceModels';
 import styles from './BillingPage.module.scss';
 
 const TIME_RANGE_STORAGE_KEY = 'cli-proxy-billing-time-range-v1';
@@ -65,11 +66,14 @@ export function BillingPage() {
   );
   const pricingByModel = useModelPricingStore((s) => s.pricingByModel);
   const exportPricing = useModelPricingStore((s) => s.exportJson);
+  const exportPricingTemplate = useModelPricingStore((s) => s.exportTemplateJson);
   const importPricing = useModelPricingStore((s) => s.importJsonMergeOverwrite);
+  const { models: availableModels } = useModelPriceModels();
 
   const [timeRange, setTimeRange] = useState<UsageTimeRange>(loadTimeRange);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [exportingTemplate, setExportingTemplate] = useState(false);
   const [importing, setImporting] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencySymbol>(() => loadSelectedCurrency());
 
@@ -126,7 +130,17 @@ export function BillingPage() {
         const text = await file.text();
         const parsed = JSON.parse(text);
         const result = importPricing(parsed);
-        showNotification(t('billing.model_pricing_import_success', { models: result.importedModels }), 'success');
+        const suffix =
+          result.skippedModels > 0
+            ? ` · ${t('billing.model_pricing_import_skipped', {
+                count: result.skippedModels,
+                defaultValue: `跳过 ${result.skippedModels} 个未填写/无效`,
+              })}`
+            : '';
+        showNotification(
+          `${t('billing.model_pricing_import_success', { models: result.importedModels })}${suffix}`,
+          'success'
+        );
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : '';
         showNotification(`${t('billing.model_pricing_import_failed')}${message ? `: ${message}` : ''}`, 'error');
@@ -153,6 +167,42 @@ export function BillingPage() {
     () => buildModelPricingAnalytics(details, pricingByModel, { hourWindowHours, now: lastRefreshedAt ?? undefined }),
     [details, hourWindowHours, lastRefreshedAt, pricingByModel]
   );
+
+  const templateModelNames = useMemo(() => {
+    const set = new Set<string>();
+    availableModels.forEach((model) => {
+      const name = String(model.name ?? '').trim();
+      if (name) set.add(name);
+    });
+    Object.keys(pricingByModel).forEach((name) => set.add(name));
+    analytics.models.forEach((model) => set.add(model.modelName));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [analytics.models, availableModels, pricingByModel]);
+
+  const handleExportTemplate = useCallback(() => {
+    setExportingTemplate(true);
+    try {
+      const payload = exportPricingTemplate(templateModelNames);
+      const safeTimestamp = new Date().toISOString();
+      const filename = `model-pricing-template-${safeTimestamp.replace(/[:.]/g, '-')}.json`;
+      downloadBlob({
+        filename,
+        blob: new Blob([JSON.stringify(payload ?? {}, null, 2)], { type: 'application/json' }),
+      });
+      showNotification(
+        t('billing.model_pricing_export_template_success', {
+          models: templateModelNames.length,
+          defaultValue: `已导出 ${templateModelNames.length} 个模型模板`,
+        }),
+        'success'
+      );
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '';
+      showNotification(`${t('billing.model_pricing_export_failed')}${message ? `: ${message}` : ''}`, 'error');
+    } finally {
+      setExportingTemplate(false);
+    }
+  }, [exportPricingTemplate, showNotification, t, templateModelNames]);
 
   const timeRangeLabel = useMemo(() => t(TIME_RANGE_LABEL_KEY[timeRange]), [t, timeRange]);
   const resolvedSelectedCurrency = useMemo(
@@ -221,6 +271,15 @@ export function BillingPage() {
           <Button
             variant="secondary"
             size="sm"
+            onClick={handleExportTemplate}
+            loading={exportingTemplate}
+            disabled={loading || importing || exporting || templateModelNames.length === 0}
+          >
+            {t('billing.model_pricing_export_template', { defaultValue: '导出全模型模板' })}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={handleImport}
             loading={importing}
             disabled={loading || exporting}
@@ -231,7 +290,7 @@ export function BillingPage() {
             variant="secondary"
             size="sm"
             onClick={() => void loadUsage().catch(() => {})}
-            disabled={loading || exporting || importing}
+            disabled={loading || exporting || importing || exportingTemplate}
           >
             {loading ? t('common.loading') : t('common.refresh')}
           </Button>
@@ -292,31 +351,28 @@ export function BillingPage() {
         />
       </div>
 
-      <TopBarChartCard
-        loading={loading && !usage}
-        items={endpointTopItems}
-        isDark={isDark}
-        title={t('billing.top_endpoints_title')}
-        subtitle={`${timeRangeLabel} | ${resolvedSelectedCurrency || t('billing.select_currency')}`}
-        costLabel={t('billing.cost')}
-        requestsLabel={t('billing.requests')}
-        tokensLabel={t('billing.tokens')}
-        costFormatter={(v) => formatMoney(resolvedSelectedCurrency, v)}
-        emptyText={t('billing.no_endpoints')}
-        collapseSectionId="chart-top-endpoints"
-      />
-
       <div className={styles.detailsGrid}>
-        <ModelListCard loading={loading && !usage} models={analytics.models} selectedCurrency={resolvedSelectedCurrency} />
-        <EndpointAnalysisListCard
+        <ModelListCard
+          loading={loading && !usage}
+          models={analytics.models}
+          selectedCurrency={resolvedSelectedCurrency}
+          pricingByModel={pricingByModel}
+        />
+        <TopEndpointsCard
           loading={loading && !usage}
           endpoints={analytics.endpoints}
+          topItems={endpointTopItems}
           selectedCurrency={resolvedSelectedCurrency}
+          timeRangeLabel={timeRangeLabel}
+          isDark={isDark}
         />
       </div>
 
       <BillingDetailsCard
         loading={loading && !usage}
+        refreshing={loading}
+        lastUpdatedAt={lastRefreshedAt}
+        onRefresh={() => void loadUsage().catch(() => {})}
         timeRangeLabel={timeRangeLabel}
         details={details}
         pricingByModel={pricingByModel}

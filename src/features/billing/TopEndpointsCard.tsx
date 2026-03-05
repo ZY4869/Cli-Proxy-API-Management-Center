@@ -2,21 +2,38 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
-import { formatCompactNumber, formatUsd } from '@/utils/usage';
-import type { BillingAnalytics } from './utils/dashboard';
-import styles from './BillingPage.module.scss';
+import { Card } from '@/components/ui/Card';
+import { formatCompactNumber } from '@/utils/usage';
+import type { EndpointAggregateForAnalysis } from './modelPricing/analyticsTypes';
+import type { CurrencySymbol } from './modelPricing/types';
+import { formatMoney } from './modelPricing/money';
+import type { TopBarChartItem, TopBarChartViewMode } from './TopBarChartCard';
+import { useBillingCollapse } from './collapse/useBillingCollapse';
+import { CollapseToggleButton } from './collapse/CollapseToggleButton';
+import { EndpointAnalysisList } from './EndpointAnalysisListCard';
+import styles from '@/pages/UsagePage.module.scss';
+import billingStyles from './BillingPage.module.scss';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-type ViewMode = 'cost' | 'requests' | 'tokens';
+type TopEndpointsView = 'chart' | 'list';
 
-const MODE_COLORS: Record<ViewMode, string> = {
+export type TopEndpointsCardProps = {
+  loading: boolean;
+  isDark: boolean;
+  timeRangeLabel: string;
+  selectedCurrency: CurrencySymbol;
+  topItems: TopBarChartItem[];
+  endpoints: EndpointAggregateForAnalysis[];
+};
+
+const MODE_COLORS: Record<TopBarChartViewMode, string> = {
   cost: '#f59e0b',
   requests: '#3b82f6',
   tokens: '#8b5cf6',
 };
 
-const MODE_BG: Record<ViewMode, string> = {
+const MODE_BG: Record<TopBarChartViewMode, string> = {
   cost: 'rgba(245, 158, 11, 0.28)',
   requests: 'rgba(59, 130, 246, 0.28)',
   tokens: 'rgba(139, 92, 246, 0.28)',
@@ -29,45 +46,44 @@ function shortenLabel(label: string, maxLen: number) {
   return `${label.slice(0, safeMax - 3)}...`;
 }
 
-export type TopEndpointsCardProps = {
-  loading: boolean;
-  analytics: BillingAnalytics;
-  isDark: boolean;
-  timeRangeLabel: string;
-};
-
-export function TopEndpointsCard({ loading, analytics, isDark, timeRangeLabel }: TopEndpointsCardProps) {
+export function TopEndpointsCard({
+  loading,
+  isDark,
+  timeRangeLabel,
+  selectedCurrency,
+  topItems,
+  endpoints,
+}: TopEndpointsCardProps) {
   const { t } = useTranslation();
-  const [viewMode, setViewMode] = useState<ViewMode>('cost');
-
-  const candidates = useMemo(() => analytics.endpoints.filter((e) => e.requests > 0), [analytics.endpoints]);
+  const [collapsed, setCollapsed] = useBillingCollapse('table-endpoint-analysis');
+  const [view, setView] = useState<TopEndpointsView>('list');
+  const [viewMode, setViewMode] = useState<TopBarChartViewMode>('cost');
 
   const top = useMemo(() => {
-    const list = viewMode === 'cost' ? candidates.filter((e) => e.costKnown) : candidates;
-    return list
-      .map((e) => {
-        const value =
-          viewMode === 'cost' ? e.costs.totalCost : viewMode === 'requests' ? e.requests : e.promptTokens + e.outputBillableTokens;
-        return { endpoint: e.endpointKey, value: Number.isFinite(value) ? value : 0 };
-      })
-      .filter((x) => x.value > 0)
+    return topItems
+      .map((e) => ({
+        label: e.label,
+        value: viewMode === 'cost' ? e.cost : viewMode === 'requests' ? e.requests : e.tokens,
+      }))
+      .filter((x) => Number.isFinite(x.value) && x.value > 0)
       .sort((a, b) => b.value - a.value)
       .slice(0, 10);
-  }, [candidates, viewMode]);
+  }, [topItems, viewMode]);
 
   const hasData = top.length > 0;
+  const costFormatter = useMemo(() => (v: number) => formatMoney(selectedCurrency, v), [selectedCurrency]);
 
   const chartData = useMemo(
     () => ({
-      labels: top.map((x) => x.endpoint),
+      labels: top.map((x) => x.label),
       datasets: [
         {
           label:
             viewMode === 'cost'
-              ? t('billing.sort_cost')
+              ? t('billing.cost')
               : viewMode === 'requests'
-                ? t('billing.sort_requests')
-                : t('billing.sort_tokens'),
+                ? t('billing.requests')
+                : t('billing.tokens'),
           data: top.map((x) => x.value),
           backgroundColor: MODE_BG[viewMode],
           borderColor: MODE_COLORS[viewMode],
@@ -95,10 +111,10 @@ export function TopEndpointsCard({ loading, analytics, isDark, timeRangeLabel }:
           borderWidth: 1,
           padding: 10,
           callbacks: {
-            title: (items: any[]) => items?.[0]?.label ?? '',
+            title: (ctx: any[]) => ctx?.[0]?.label ?? '',
             label: (ctx: any) => {
               const value = Number(ctx.raw) || 0;
-              if (viewMode === 'cost') return `${t('billing.cost')}: ${formatUsd(value)}`;
+              if (viewMode === 'cost') return `${t('billing.cost')}: ${costFormatter(value)}`;
               if (viewMode === 'requests') return `${t('billing.requests')}: ${Math.round(value).toLocaleString()}`;
               return `${t('billing.tokens')}: ${formatCompactNumber(value)}`;
             },
@@ -113,7 +129,7 @@ export function TopEndpointsCard({ loading, analytics, isDark, timeRangeLabel }:
             font: { size: 11 },
             callback: (value: string | number) => {
               const num = typeof value === 'number' ? value : Number(value);
-              if (viewMode === 'cost') return formatUsd(num);
+              if (viewMode === 'cost') return costFormatter(num);
               if (viewMode === 'requests') return Math.round(num).toLocaleString();
               return formatCompactNumber(num);
             },
@@ -124,68 +140,85 @@ export function TopEndpointsCard({ loading, analytics, isDark, timeRangeLabel }:
           ticks: {
             color: isDark ? 'rgba(255, 255, 255, 0.72)' : 'rgba(17, 24, 39, 0.72)',
             font: { size: 11 },
-            callback: (value: string | number, index: number) =>
-              shortenLabel(top[index]?.endpoint ?? String(value), 26),
+            callback: (value: string | number, index: number) => shortenLabel(top[index]?.label ?? String(value), 26),
           },
         },
       },
     }),
-    [isDark, t, top, viewMode]
+    [costFormatter, isDark, t, top, viewMode]
   );
-
-  const subtitle = useMemo(() => {
-    if (!analytics.hasAnyEnabledRule && viewMode === 'cost') return t('billing.no_enabled_rules');
-    if (viewMode === 'cost' && analytics.missingCostRequestCount > 0) {
-      return `${timeRangeLabel} | ${t('billing.missing_rules_short', { missingRequests: analytics.missingCostRequestCount })}`;
-    }
-    return timeRangeLabel;
-  }, [analytics.hasAnyEnabledRule, analytics.missingCostRequestCount, t, timeRangeLabel, viewMode]);
 
   return (
-    <div className={styles.chartCard}>
-      <div className={styles.chartHeader}>
-        <div>
-          <h3 className={styles.chartTitle}>{t('billing.top_endpoints_title')}</h3>
-          <p className={styles.chartSubtitle}>{subtitle}</p>
+    <Card
+      title={t('billing.top_endpoints_title')}
+      subtitle={`${timeRangeLabel} | ${selectedCurrency || t('billing.select_currency')}`}
+      className={styles.detailsFixedCard}
+      extra={
+        <div className={billingStyles.chartHeaderActions}>
+          <div className={billingStyles.chartControls}>
+            <button
+              type="button"
+              className={`${billingStyles.chartControlBtn} ${view === 'chart' ? billingStyles.active : ''}`}
+              onClick={() => setView('chart')}
+            >
+              {t('common.chart', { defaultValue: '图表' })}
+            </button>
+            <button
+              type="button"
+              className={`${billingStyles.chartControlBtn} ${view === 'list' ? billingStyles.active : ''}`}
+              onClick={() => setView('list')}
+            >
+              {t('common.list', { defaultValue: '列表' })}
+            </button>
+          </div>
+          <CollapseToggleButton collapsed={collapsed} onToggle={() => setCollapsed((prev) => !prev)} />
         </div>
-        <div className={styles.chartControls}>
-          <button
-            type="button"
-            className={`${styles.chartControlBtn} ${viewMode === 'cost' ? styles.active : ''}`}
-            onClick={() => setViewMode('cost')}
-          >
-            {t('billing.sort_cost')}
-          </button>
-          <button
-            type="button"
-            className={`${styles.chartControlBtn} ${viewMode === 'requests' ? styles.active : ''}`}
-            onClick={() => setViewMode('requests')}
-          >
-            {t('billing.sort_requests')}
-          </button>
-          <button
-            type="button"
-            className={`${styles.chartControlBtn} ${viewMode === 'tokens' ? styles.active : ''}`}
-            onClick={() => setViewMode('tokens')}
-          >
-            {t('billing.sort_tokens')}
-          </button>
-        </div>
-      </div>
+      }
+    >
+      {collapsed ? null : view === 'list' ? (
+        <EndpointAnalysisList loading={loading} endpoints={endpoints} selectedCurrency={selectedCurrency} />
+      ) : (
+        <>
+          <div className={billingStyles.chartHeaderActions}>
+            <div className={billingStyles.chartControls}>
+              <button
+                type="button"
+                className={`${billingStyles.chartControlBtn} ${viewMode === 'cost' ? billingStyles.active : ''}`}
+                onClick={() => setViewMode('cost')}
+              >
+                {t('billing.sort_cost')}
+              </button>
+              <button
+                type="button"
+                className={`${billingStyles.chartControlBtn} ${viewMode === 'requests' ? billingStyles.active : ''}`}
+                onClick={() => setViewMode('requests')}
+              >
+                {t('billing.sort_requests')}
+              </button>
+              <button
+                type="button"
+                className={`${billingStyles.chartControlBtn} ${viewMode === 'tokens' ? billingStyles.active : ''}`}
+                onClick={() => setViewMode('tokens')}
+              >
+                {t('billing.sort_tokens')}
+              </button>
+            </div>
+          </div>
 
-      <div className={styles.chartContent}>
-        {loading ? (
-          <div className={styles.chartEmpty}>{t('common.loading')}</div>
-        ) : !hasData ? (
-          <div className={styles.chartEmpty}>
-            {viewMode === 'cost' && !analytics.hasAnyEnabledRule ? t('billing.no_enabled_rules') : t('billing.no_endpoints')}
+          <div className={billingStyles.chartContent}>
+            {loading ? (
+              <div className={billingStyles.chartEmpty}>{t('common.loading')}</div>
+            ) : !hasData ? (
+              <div className={billingStyles.chartEmpty}>{t('billing.no_endpoints')}</div>
+            ) : (
+              <div className={billingStyles.barChartContent}>
+                <Bar data={chartData} options={chartOptions} />
+              </div>
+            )}
           </div>
-        ) : (
-          <div className={styles.barChartContent}>
-            <Bar data={chartData} options={chartOptions} />
-          </div>
-        )}
-      </div>
-    </div>
+        </>
+      )}
+    </Card>
   );
 }
+
