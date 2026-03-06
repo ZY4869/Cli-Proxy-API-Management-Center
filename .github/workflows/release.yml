@@ -33,11 +33,10 @@ jobs:
         env:
           VERSION: ${{ github.ref_name }}
 
-      - name: Prepare release assets
+      - name: Verify release asset
         run: |
-          cd dist
-          mv index.html management.html
-          ls -lh management.html
+          test -f dist/management.html
+          ls -lh dist/management.html
 
       - name: Generate release notes
         run: |

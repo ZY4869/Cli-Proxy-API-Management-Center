@@ -1,2 +1,2 @@
-# Build artifact: avoid huge diffs and textual merge-conflicts (conflict markers).
-dist/management.html -diff -text merge=binary
+# Build artifact: keep current-branch management.html during merges and avoid huge diffs.
+dist/management.html -diff -text merge=managementhtml

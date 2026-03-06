@@ -10,7 +10,9 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,scss}\"",
     "type-check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "setup:merge-driver": "node scripts/setup-management-html-merge-driver.mjs",
+    "check:merge-driver": "node scripts/setup-management-html-merge-driver.mjs --check"
   },
   "dependencies": {
     "@codemirror/lang-yaml": "^6.1.2",
